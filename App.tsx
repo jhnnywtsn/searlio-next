@@ -16,38 +16,45 @@ const inboxItems = [
   },
 ];
 
-const conversations = {
+const initialConversations = {
   "1": {
     id: "1",
     sender: "John - Website Lead",
     messages: [
-      {
-        id: "m1",
-        role: "incoming",
-        text: "Hi, I need a quote for a kitchen remodel.",
-      },
-      {
-        id: "m2",
-        role: "assistant",
-        text: "Absolutely — what size kitchen are you working with?",
-      },
-    ],
+      { id: "m1", role: "incoming", text: "Hi, I need a quote for a kitchen remodel." },
+      { id: "m2", role: "assistant", text: "Absolutely — what size kitchen are you working with?" }
+    ]
   },
   "2": {
     id: "2",
     sender: "Sarah",
-    messages: [],
-  },
+    messages: [
+      { id: "m1", role: "incoming", text: "Can you call me back?" }
+    ]
+  }
 };
 
 export default function App() {
-  const [selectedId, setSelectedId] = React.useState("1");
-  const [draft, setDraft] = React.useState("");
+  const [conversations, setConversations] = React.useState(initialConversations); // State for conversations
+  const [selectedId, setSelectedId] = React.useState("1"); // State for selected conversation
+  const [draft, setDraft] = React.useState(""); // State for the draft message
 
-  const selectedConversation = conversations[selectedId];
+  const selectedConversation = conversations[selectedId]; // Deriving the active conversation
 
   const handleGenerateAI = () => {
-    setDraft("Thanks for reaching out — I can help with that. What’s the best number to reach you?");
+    const newMessage = {
+      id: `m${selectedConversation.messages.length + 1}`,
+      role: "assistant",
+      text: "Thanks for reaching out — I can help with that. What’s the best number to reach you?"
+    };
+
+    setConversations((prev) => ({
+      ...prev,
+      [selectedId]: {
+        ...prev[selectedId],
+        messages: [...prev[selectedId].messages, newMessage],
+      },
+    }));
   };
 
   const handleSend = () => {
@@ -59,9 +66,15 @@ export default function App() {
       text: draft.trim(),
     };
 
-    conversations[selectedId].messages.push(newMessage); // Append to active conversation
+    setConversations((prev) => ({
+      ...prev,
+      [selectedId]: {
+        ...prev[selectedId],
+        messages: [...prev[selectedId].messages, newMessage],
+      },
+    }));
 
-    setDraft("");
+    setDraft(""); // Clear the draft after sending
   };
 
   return (
@@ -71,12 +84,12 @@ export default function App() {
         <View style={styles.card}>
           <Text style={styles.title}>Searlio Next</Text>
           <Text style={styles.sectionTitle}>Pending Inbox</Text>
-
+          
           {inboxItems.map((item) => (
             <TouchableOpacity
               key={item.id}
               style={styles.notificationCard}
-              onPress={() => setSelectedId(item.id)} // Set selectedId to the id of the pressed item
+              onPress={() => setSelectedId(item.id)} 
             >
               <View style={styles.row}>
                 <Text style={styles.sender}>{item.sender}</Text>
@@ -298,6 +311,5 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
-
 
 
