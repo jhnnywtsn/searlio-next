@@ -7,12 +7,14 @@ const inboxItems = [
     sender: "John - Website Lead",
     content: "Need quote for kitchen remodel",
     priority: "high",
+    status: "new", // Added status field
   },
   {
     id: "2",
     sender: "Sarah",
     content: "Can you call me back?",
     priority: "normal",
+    status: "new", // Added status field
   },
 ];
 
@@ -22,16 +24,16 @@ const initialConversations = {
     sender: "John - Website Lead",
     messages: [
       { id: "m1", role: "incoming", text: "Hi, I need a quote for a kitchen remodel." },
-      { id: "m2", role: "assistant", text: "Absolutely — what size kitchen are you working with?" }
-    ]
+      { id: "m2", role: "assistant", text: "Absolutely — what size kitchen are you working with?" },
+    ],
+    status: "new", // Updated to include status
   },
   "2": {
     id: "2",
     sender: "Sarah",
-    messages: [
-      { id: "m1", role: "incoming", text: "Can you call me back?" }
-    ]
-  }
+    messages: [],
+    status: "new", // Updated to include status
+  },
 };
 
 export default function App() {
@@ -45,7 +47,7 @@ export default function App() {
     const newMessage = {
       id: `m${selectedConversation.messages.length + 1}`,
       role: "assistant",
-      text: "Thanks for reaching out — I can help with that. What’s the best number to reach you?"
+      text: "Thanks for reaching out — I can help with that. What’s the best number to reach you?",
     };
 
     setConversations((prev) => ({
@@ -53,6 +55,7 @@ export default function App() {
       [selectedId]: {
         ...prev[selectedId],
         messages: [...prev[selectedId].messages, newMessage],
+        status: "draft", // Update status to draft
       },
     }));
   };
@@ -71,6 +74,7 @@ export default function App() {
       [selectedId]: {
         ...prev[selectedId],
         messages: [...prev[selectedId].messages, newMessage],
+        status: "sent", // Update status to sent
       },
     }));
 
@@ -103,6 +107,20 @@ export default function App() {
                 </View>
               </View>
               <Text style={styles.content}>{item.content}</Text>
+
+              {/* STATUS BADGE */}
+              <View style={[
+                styles.statusBadge,
+                item.status === "new" ? styles.badgeNew : 
+                item.status === "draft" ? styles.badgeDraft : 
+                item.status === "sent" ? styles.badgeSent : {}
+              ]}>
+                <Text style={styles.badgeText}>
+                  {item.status === "new" ? "NEW" : 
+                   item.status === "draft" ? "DRAFT READY" : 
+                   item.status === "sent" ? "SENT" : ""}
+                </Text>
+              </View>
             </TouchableOpacity>
           ))}
         </View>
@@ -231,6 +249,25 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   
+  // Status Badges
+  statusBadge: {
+    marginTop: 10,
+    padding: 6,
+    borderRadius: 5,
+  },
+
+  badgeNew: {
+    backgroundColor: "#1e40af", // Blue for new
+  },
+  
+  badgeDraft: {
+    backgroundColor: "#6b21a8", // Purple for draft
+  },
+  
+  badgeSent: {
+    backgroundColor: "#22c55e", // Green for sent
+  },
+
   // Agent Panel Styles
   agentPanel: {
     width: "50%",
@@ -311,5 +348,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
 
 
