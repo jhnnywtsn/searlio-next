@@ -75,16 +75,56 @@ const normalizeBackendNotification = (n: BackendNotification) => {
   };
 };
 
+const formatMessageTime = (value) => {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
+const hasUnreadInbound = (messages) => {
+  return messages.some(
+    (msg) =>
+      msg.role !== "assistant" &&
+      msg.status === "inbound"
+  );
+};
+
 export default function App() {
   const [conversations, setConversations] = React.useState(initialConversations);
   const [selectedId, setSelectedId] = React.useState("1");
   const [draft, setDraft] = React.useState("");
   const [filter, setFilter] = React.useState("All");
   const [backendOnline, setBackendOnline] = React.useState(false);
-  const [isGenerating, setIsGenerating] = React.useState(false);
-  const [isSending, setIsSending] = React.useState(false);
   const [sendError, setSendError] = React.useState("");
+  const scrollRef = React.useRef(null);
 
+  const clearDraft = () => {
+    setDraft("");
+  
+    setConversations((prev) => {
+      const existing = prev[selectedConversation.id];
+  
+      if (!existing) return prev;
+  
+      return {
+        ...prev,
+        [selectedConversation.id]: {
+          ...existing,
+          messages: existing.messages.filter(
+            (msg) => msg.status !== "draft"
+          ),
+        },
+      };
+    });
+  };
+  
   const selectedConversation =
     conversations[selectedId] ||
     Object.values(conversations)[0];
@@ -95,15 +135,66 @@ export default function App() {
 
   // Function to filter conversations based on the selected filter
   const filterConversations = () => {
-    return Object.values(conversations).filter(conversation => {
-      const status = getConversationStatus(conversation.messages);
-      return filter === "All" || status === filter.toLowerCase();
-    });
+    return Object.values(conversations)
+      .filter((conversation) => {
+        const status = getConversationStatus(
+          conversation.messages
+        );
+  
+        return (
+          filter === "All" ||
+          status === filter.toLowerCase()
+        );
+      })
+      .sort((a, b) => {
+        const aHasDraft = a.messages.some(
+          (m) => m.status === "draft"
+        );
+  
+        const bHasDraft = b.messages.some(
+          (m) => m.status === "draft"
+        );
+  
+        if (aHasDraft && !bHasDraft) return -1;
+        if (bHasDraft && !aHasDraft) return 1;
+  
+        const aHasInbound = a.messages.some(
+          (m) =>
+            m.role !== "assistant" &&
+            m.status === "inbound"
+        );
+  
+        const bHasInbound = b.messages.some(
+          (m) =>
+            m.role !== "assistant" &&
+            m.status === "inbound"
+        );
+  
+        if (aHasInbound && !bHasInbound) return -1;
+        if (bHasInbound && !aHasInbound) return 1;
+  
+        const aLatest = Math.max(
+          ...a.messages.map((m) =>
+            new Date(
+              m.createdAt || 0
+            ).getTime()
+          )
+        );
+  
+        const bLatest = Math.max(
+          ...b.messages.map((m) =>
+            new Date(
+              m.createdAt || 0
+            ).getTime()
+          )
+        );
+  
+        return bLatest - aLatest;
+      });
   };
 
   const handleGenerateAI = async () => {
-    if (!selectedConversation?.id || isGenerating) return;
-    setIsGenerating(true);
+    if (!selectedConversation?.id) return;
   
     try {
       const res = await fetch(
@@ -166,18 +257,11 @@ export default function App() {
       });
     } catch (err) {
       console.log("AI generation failed:", err);
-    } finally {
-      setIsGenerating(false);
     }
   };
 
   const handleSend = async () => {
     if (!selectedConversation?.id) return;
-
-    if (isSending) return;
-    
-    setIsSending(true);
-    setSendError("");
   
     const textToSend =
       draft.trim() ||
@@ -244,9 +328,6 @@ export default function App() {
       setDraft("");
     } catch (err) {
       console.log("Send failed:", err);
-      setSendError("Send failed. Check backend route or reply payload.");
-    } finally {
-      setIsSending(false);
     }
   };
 
@@ -285,6 +366,27 @@ export default function App() {
   
     return () => clearInterval(interval);
   }, [conversations]);
+
+  React.useEffect(() => {
+    if (!selectedConversation) return;
+  
+    const existingDraft =
+      selectedConversation.messages.find(
+        (msg) => msg.status === "draft"
+      );
+  
+    setDraft(existingDraft?.text || "");
+  }, [selectedId, conversations]);
+
+  React.useEffect(() => {
+    const ids = Object.keys(conversations);
+  
+    if (ids.length === 0) return;
+  
+    if (!conversations[selectedId]) {
+      setSelectedId(ids[0]);
+    }
+  }, [conversations, selectedId]);
   
   const hydrateNotifications = async () => {
     const res = await fetch(`${BACKEND_URL}/api/notifications`);
@@ -351,6 +453,29 @@ export default function App() {
    }
  };
  
+ const simulateNotification = async () => {
+   try {
+     const res = await fetch(
+       `${BACKEND_URL}/api/simulate/notification?category=text`,
+       {
+         method: "POST",
+         headers: {
+           "Content-Type": "application/json",
+         },
+         body: JSON.stringify({}),
+       }
+     );
+ 
+     if (!res.ok) {
+       throw new Error(`Simulation failed: ${res.status}`);
+     }
+ 
+     await refreshFromBackend();
+   } catch (err) {
+     console.log("Error simulating notification:", err);
+   }
+ };
+
   return (
     <SafeAreaView style={styles.page}>
       <View style={styles.container}>
@@ -389,6 +514,11 @@ export default function App() {
           <Text style={styles.metricText}>Failed: {totalFailed}</Text>
         </View>
 
+        {/* Developer Only Button */}
+        <TouchableOpacity style={styles.devButton} onPress={simulateNotification}>
+          <Text style={styles.buttonText}>Simulate Notification</Text>
+        </TouchableOpacity>
+
         {/* Main Content Layout */}
         <View style={styles.mainLayout}>
           {/* LEFT Panel */}
@@ -424,7 +554,15 @@ export default function App() {
                     onPress={() => setSelectedId(conversation.id)} 
                   >
                     <View style={styles.row}>
-                      <Text style={styles.sender}>{conversation.sender}</Text>
+                      <View style={styles.senderRow}>
+                        <Text style={styles.sender}>
+                          {conversation.sender}
+                        </Text>
+                      
+                        {hasUnreadInbound(conversation.messages) && (
+                          <View style={styles.unreadDot} />
+                        )}
+                      </View>
                       <View style={[
                         styles.badge,
                         conversationStatus === "urgent" && styles.badgeUrgent,
@@ -445,76 +583,131 @@ export default function App() {
           </View>
 
           {/* RIGHT Panel */}
-          <View style={styles.rightPanel}>
-            <View style={styles.agentCard}>
-              <Text style={styles.agentTitle}>{selectedConversation.sender}</Text>
-              <ScrollView style={styles.messagesContainer}>
-                {selectedConversation.messages.map((message) => (
-                  <View key={message.id}>
-                    <View
-                      style={[
-                        styles.messageBubble,
-                        message.role === "assistant"
-                          ? message.status === "sent"
-                            ? styles.assistantBubbleSent
-                            : styles.assistantBubbleDraft
-                          : styles.incomingBubble,
-                      ]}
-                    >
-                      <Text style={styles.messageText}>
-                        {message.text}
-                      </Text>
-                      {message.role === "assistant" && message.status && (
-                        <Text style={styles.statusText}>
-                          {message.status.toUpperCase()}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                ))}
-              </ScrollView>
-
-              {/* Composer Area */}
-              <View style={styles.composer}>
-                <View style={styles.inputRow}>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Type your message..."
-                    value={draft}
-                    onChangeText={setDraft}
-                  />
-                </View>
-                {sendError ? (
-                  <Text style={styles.errorText}>{sendError}</Text>
-                ) : null}
-                <View style={styles.actionRow}>
-                  <TouchableOpacity
-                    style={[styles.aiButton, isGenerating && styles.disabledButton]}
-                    onPress={handleGenerateAI}
-                    disabled={isGenerating}
-                  >
-                    <Text style={styles.buttonText}>
-                      {isGenerating ? "Generating..." : "Generate AI"}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.sendButton, isSending && styles.disabledButton]}
-                    onPress={handleSend}
-                    disabled={isSending}
-                  >
-                    <Text style={styles.buttonText}>
-                      {isSending ? "Sending..." : "Send"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </View>
-        </View>
-      </View>
-    </SafeAreaView>
-  );
-}
+                             <View style={styles.rightPanel}>
+                               <View style={styles.agentCard}>
+                                 <Text style={styles.agentTitle}>{selectedConversation.sender}</Text>
+                                 <ScrollView
+                                   ref={scrollRef}
+                                   style={styles.messagesContainer}
+                                   onContentSizeChange={() =>
+                                     scrollRef.current?.scrollToEnd({ animated: true })
+                                   }
+                                 >
+                                   {[...selectedConversation.messages]
+                                     .sort((a, b) => {
+                                       // Drafts always last
+                                       if (a.status === "draft") return 1;
+                                       if (b.status === "draft") return -1;
+                                 
+                                       // Sent assistant messages near bottom
+                                       if (a.status === "sent" && b.role !== "assistant") return 1;
+                                       if (b.status === "sent" && a.role !== "assistant") return -1;
+                                 
+                                       return new Date(a.createdAt || 0).getTime() -
+                                              new Date(b.createdAt || 0).getTime();
+                                     })
+                                     .map((message) => {
+                                       if (message.status === "draft") {
+                                         return null;
+                                       }
+                                 
+                                       return (
+                                         <View key={message.id}>
+                                           <View
+                                             style={[
+                                               styles.messageBubble,
+                                               message.role === "assistant"
+                                                 ? message.status === "sent"
+                                                   ? styles.assistantBubbleSent
+                                                   : styles.assistantBubbleDraft
+                                                 : styles.incomingBubble,
+                                             ]}
+                                           >
+                                             <Text style={styles.messageText}>
+                                               {message.text}
+                                             </Text>
+                                             {message.createdAt ? (
+                                               <Text style={styles.messageTime}>
+                                                 {formatMessageTime(message.createdAt)}
+                                               </Text>
+                                             ) : null}
+                                             {message.role === "assistant" && message.status && (
+                                               <Text style={styles.statusText}>
+                                                 {message.status.toUpperCase()}
+                                               </Text>
+                                             )}
+                                           </View>
+                                         </View>
+                                       );
+                                     })}
+                                 </ScrollView>
+                   
+                                 {/* Composer Area */}
+                                 <View style={styles.composer}>
+                                   {draft.trim() ? (
+                                     <View style={styles.activeDraftPreview}>
+                                       <Text style={styles.activeDraftLabel}>
+                                         ACTIVE DRAFT
+                                       </Text>
+                                   
+                                       <Text style={styles.activeDraftText}>
+                                         {draft}
+                                       </Text>
+                                     </View>
+                                   ) : null}
+                                   <View style={styles.inputRow}>
+                                     <TextInput
+                                       style={styles.input}
+                                       placeholder="Edit active draft..."
+                                       value={draft}
+                                       onChangeText={(text) => {
+                                         setDraft(text);
+                                       
+                                         setConversations((prev) => {
+                                           const updatedMessages =
+                                             prev[selectedConversation.id].messages.map(
+                                               (msg) =>
+                                                 msg.status === "draft"
+                                                   ? {
+                                                       ...msg,
+                                                       text,
+                                                     }
+                                                   : msg
+                                             );
+                                       
+                                           return {
+                                             ...prev,
+                                             [selectedConversation.id]: {
+                                               ...prev[selectedConversation.id],
+                                               messages: updatedMessages,
+                                             },
+                                           };
+                                         });
+                                       }}
+                                     />
+                                   </View>
+                                   <View style={styles.actionRow}>
+                                     <TouchableOpacity style={styles.aiButton} onPress={handleGenerateAI}>
+                                       <Text style={styles.buttonText}>Generate AI</Text>
+                                     </TouchableOpacity>
+                                     <TouchableOpacity
+                                       style={styles.clearButton}
+                                       onPress={clearDraft}
+                                     >
+                                       <Text style={styles.buttonText}>Clear</Text>
+                                     </TouchableOpacity>
+                                     <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+                                       <Text style={styles.buttonText}>Send</Text>
+                                     </TouchableOpacity>
+                                   </View>
+                                 </View>
+                               </View>
+                             </View>
+                           </View>
+                         </View>
+                       </SafeAreaView>
+                     );
+                   }         
 
 const styles = StyleSheet.create({
   page: {
@@ -675,21 +868,40 @@ const styles = StyleSheet.create({
     maxWidth: "82%",
   },
   assistantBubbleSent: {
-    backgroundColor: "#22c55e",
     alignSelf: "flex-end",
+    backgroundColor: "#052E16",
+    borderWidth: 1,
+    borderColor: "#22C55E",
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 12,
+    maxWidth: "82%",
   },
   assistantBubbleDraft: {
-    backgroundColor: "#6b21a8",
     alignSelf: "flex-end",
+    backgroundColor: "#172554",
+    borderWidth: 1,
+    borderColor: "#3B82F6",
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 12,
+    maxWidth: "82%",
   },
   incomingBubble: {
-    backgroundColor: "#2B2B2E",
     alignSelf: "flex-start",
+    backgroundColor: "#1E293B",
+    borderWidth: 1,
+    borderColor: "#334155",
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 12,
+    maxWidth: "82%",
   },
+  
   messageText: {
-    color: "#fff",
+    color: "#F8FAFC",
     fontSize: 15,
-    lineHeight: 21,
+    lineHeight: 22,
   },
   statusText: {
     color: "#fff",
@@ -773,6 +985,60 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     marginBottom: 8,
+  },
+  devButton: {
+    backgroundColor: "#FFB300", // Yellow color for visibility
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginTop: 20,
+  },
+  messageTime: {
+    color: "#94A3B8",
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 6,
+    opacity: 0.8,
+  },
+  senderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#22C55E",
+  },
+  activeDraftPreview: {
+    backgroundColor: "#172554",
+    borderWidth: 1,
+    borderColor: "#3B82F6",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
+  },
+  
+  activeDraftLabel: {
+    color: "#93C5FD",
+    fontSize: 10,
+    fontWeight: "800",
+    marginBottom: 6,
+    letterSpacing: 1,
+  },
+  
+  activeDraftText: {
+    color: "#EFF6FF",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  clearButton: {
+    backgroundColor: "#334155",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
   },
 });
  
