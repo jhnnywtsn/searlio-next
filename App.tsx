@@ -1,53 +1,62 @@
 import React from "react";
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View, TextInput, ScrollView } from "react-native";
 
-const inboxItems = [
-  {
-    id: "1",
-    sender: "John - Website Lead",
-    content: "Need quote for kitchen remodel",
-    priority: "high",
-    status: "new", // Added status field
-  },
-  {
-    id: "2",
-    sender: "Sarah",
-    content: "Can you call me back?",
-    priority: "normal",
-    status: "new", // Added status field
-  },
-];
-
 const initialConversations = {
   "1": {
     id: "1",
     sender: "John - Website Lead",
     messages: [
-      { id: "m1", role: "incoming", text: "Hi, I need a quote for a kitchen remodel." },
-      { id: "m2", role: "assistant", text: "Absolutely — what size kitchen are you working with?" },
+      { id: "m1", role: "incoming", text: "Hi, I need a quote for a kitchen remodel.", status: "inbound" },
+      { id: "m2", role: "assistant", text: "Absolutely — what size kitchen are you working with?", status: "draft" },
     ],
-    status: "new", // Updated to include status
+    status: "new",
   },
   "2": {
     id: "2",
     sender: "Sarah",
     messages: [],
-    status: "new", // Updated to include status
+    status: "new",
   },
 };
 
-export default function App() {
-  const [conversations, setConversations] = React.useState(initialConversations); // State for conversations
-  const [selectedId, setSelectedId] = React.useState("1"); // State for selected conversation
-  const [draft, setDraft] = React.useState(""); // State for the draft message
+// Function to calculate conversation status
+const getConversationStatus = (messages) => {
+  const hasInbound = messages.some(msg => msg.status === "inbound");
+  const hasDraft = messages.some(msg => msg.status === "draft");
+  const hasApproved = messages.some(msg => msg.status === "approved");
+  const hasSent = messages.some(msg => msg.status === "sent");
+  const hasFailed = messages.some(msg => msg.status === "failed");
+  
+  if (hasFailed) return 'failed';
+  if (hasSent) return 'responded';
+  if (hasDraft || hasApproved) return 'waiting';
+  if (hasInbound) return 'new';
 
-  const selectedConversation = conversations[selectedId]; // Deriving the active conversation
+  return 'new';
+};
+
+export default function App() {
+  const [conversations, setConversations] = React.useState(initialConversations);
+  const [selectedId, setSelectedId] = React.useState("1");
+  const [draft, setDraft] = React.useState("");
+  const [filter, setFilter] = React.useState("All");
+
+  const selectedConversation = conversations[selectedId];
+
+  // Function to filter conversations based on the selected filter
+  const filterConversations = () => {
+    return Object.values(conversations).filter(conversation => {
+      const status = getConversationStatus(conversation.messages);
+      return filter === "All" || status === filter.toLowerCase();
+    });
+  };
 
   const handleGenerateAI = () => {
     const newMessage = {
       id: `m${selectedConversation.messages.length + 1}`,
       role: "assistant",
       text: "Thanks for reaching out — I can help with that. What’s the best number to reach you?",
+      status: "draft",
     };
 
     setConversations((prev) => ({
@@ -55,7 +64,6 @@ export default function App() {
       [selectedId]: {
         ...prev[selectedId],
         messages: [...prev[selectedId].messages, newMessage],
-        status: "draft", // Update status to draft
       },
     }));
   };
@@ -67,102 +75,150 @@ export default function App() {
       id: `m${selectedConversation.messages.length + 1}`,
       role: "assistant",
       text: draft.trim(),
+      status: "sent",
     };
 
-    setConversations((prev) => ({
-      ...prev,
-      [selectedId]: {
-        ...prev[selectedId],
-        messages: [...prev[selectedId].messages, newMessage],
-        status: "sent", // Update status to sent
-      },
-    }));
+    setConversations((prev) => {
+      const updatedMessages = prev[selectedId].messages.map(msg =>
+        msg.status === "draft" ? { ...msg, status: "sent" } : msg
+      );
 
-    setDraft(""); // Clear the draft after sending
+      return {
+        ...prev,
+        [selectedId]: {
+          ...prev[selectedId],
+          messages: [...updatedMessages, newMessage],
+        },
+      };
+    });
+
+    setDraft("");
   };
+
+  // Metrics Calculation
+  const getMetrics = () => {
+    const totalPending = Object.values(conversations).filter(c => getConversationStatus(c.messages) === "waiting").length;
+    const totalSent = Object.values(conversations).filter(c => getConversationStatus(c.messages) === "responded").length;
+    const totalFailed = Object.values(conversations).filter(c => getConversationStatus(c.messages) === "failed").length;
+
+    return { totalPending, totalSent, totalFailed };
+  };
+
+  const { totalPending, totalSent, totalFailed } = getMetrics();
 
   return (
     <SafeAreaView style={styles.page}>
       <View style={styles.container}>
-        {/* LEFT: Pending Inbox */}
-        <View style={styles.card}>
-          <Text style={styles.title}>Searlio Next</Text>
-          <Text style={styles.sectionTitle}>Pending Inbox</Text>
-          
-          {inboxItems.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.notificationCard}
-              onPress={() => setSelectedId(item.id)} 
-            >
-              <View style={styles.row}>
-                <Text style={styles.sender}>{item.sender}</Text>
-                <View style={[
-                  styles.badge,
-                  item.priority === "high" && styles.badgeHigh,
-                ]}>
-                  <Text style={styles.badgeText}>
-                    {item.priority.toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.content}>{item.content}</Text>
-
-              {/* STATUS BADGE */}
-              <View style={[
-                styles.statusBadge,
-                item.status === "new" ? styles.badgeNew : 
-                item.status === "draft" ? styles.badgeDraft : 
-                item.status === "sent" ? styles.badgeSent : {}
-              ]}>
-                <Text style={styles.badgeText}>
-                  {item.status === "new" ? "NEW" : 
-                   item.status === "draft" ? "DRAFT READY" : 
-                   item.status === "sent" ? "SENT" : ""}
-                </Text>
-              </View>
+        
+        {/* Compact Command Bar for Filters */}
+        <View style={styles.commandBar}>
+          {["All", "Urgent", "Waiting", "Responded", "Failed"].map((status) => (
+            <TouchableOpacity 
+              key={status} 
+              onPress={() => setFilter(status)} 
+              style={[styles.commandChip, filter === status && styles.activeChip]}>
+              <Text style={styles.filterText}>
+                {`${status} ${status === "All" ? '' : `(${totalPending})`}`}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* RIGHT: Conversation Agent Panel */}
-        <View style={styles.agentPanel}>
-          <Text style={styles.agentTitle}>
-            {selectedConversation.sender}
-          </Text>
-          <ScrollView style={styles.messagesContainer}>
-            {selectedConversation.messages.map((message) => (
-              <View
-                key={message.id}
-                style={[
-                  styles.messageBubble,
-                  message.role === "assistant"
-                    ? styles.assistantBubble
-                    : styles.incomingBubble,
-                ]}
-              >
-                <Text style={styles.messageText}>
-                  {message.text}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
+        {/* Thin Inline Metrics Row */}
+        <View style={styles.metricsRow}>
+          <Text style={styles.metricText}>Pending: {totalPending}</Text>
+          <Text style={styles.metricText}>Sent: {totalSent}</Text>
+          <Text style={styles.metricText}>Failed: {totalFailed}</Text>
+        </View>
 
-          {/* Composer Area */}
-          <View style={styles.composer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Type your message..."
-              value={draft}
-              onChangeText={setDraft}
-            />
-            <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.aiButton} onPress={handleGenerateAI}>
-                <Text style={styles.buttonText}>Generate AI</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-                <Text style={styles.buttonText}>Send</Text>
-              </TouchableOpacity>
+        {/* Main Content Layout */}
+        <View style={styles.mainLayout}>
+          {/* LEFT Panel */}
+          <View style={styles.leftPanel}>
+            <Text style={styles.title}>Searlio Next</Text>
+            <Text style={styles.sectionTitle}>Pending Inbox</Text>
+            <View style={styles.inboxContainer}>
+              {filterConversations().map((conversation) => {
+                const conversationStatus = getConversationStatus(conversation.messages);
+                return (
+                  <TouchableOpacity
+                    key={conversation.id}
+                    style={[
+                      styles.notificationCard,
+                      conversation.id === selectedId && styles.activeCard,
+                    ]}
+                    onPress={() => setSelectedId(conversation.id)} 
+                  >
+                    <View style={styles.row}>
+                      <Text style={styles.sender}>{conversation.sender}</Text>
+                      <View style={[
+                        styles.badge,
+                        conversationStatus === "urgent" && styles.badgeUrgent,
+                        conversationStatus === "waiting" && styles.badgeWaiting,
+                        conversationStatus === "responded" && styles.badgeResponded,
+                        conversationStatus === "failed" && styles.badgeFailed
+                      ]}>
+                        <Text style={styles.badgeText}>
+                          {conversationStatus.toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.content}>{conversation.messages[0]?.text || 'No messages yet'}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* RIGHT Panel */}
+          <View style={styles.rightPanel}>
+            <View style={styles.agentCard}>
+              <Text style={styles.agentTitle}>{selectedConversation.sender}</Text>
+              <ScrollView style={styles.messagesContainer}>
+                {selectedConversation.messages.map((message) => (
+                  <View key={message.id}>
+                    <View
+                      style={[
+                        styles.messageBubble,
+                        message.role === "assistant"
+                          ? message.status === "sent"
+                            ? styles.assistantBubbleSent
+                            : styles.assistantBubbleDraft
+                          : styles.incomingBubble,
+                      ]}
+                    >
+                      <Text style={styles.messageText}>
+                        {message.text}
+                      </Text>
+                      {message.role === "assistant" && message.status && (
+                        <Text style={styles.statusText}>
+                          {message.status.toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+
+              {/* Composer Area */}
+              <View style={styles.composer}>
+                <View style={styles.inputRow}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Type your message..."
+                    value={draft}
+                    onChangeText={setDraft}
+                  />
+                </View>
+                <View style={styles.actionRow}>
+                  <TouchableOpacity style={styles.aiButton} onPress={handleGenerateAI}>
+                    <Text style={styles.buttonText}>Generate AI</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+                    <Text style={styles.buttonText}>Send</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           </View>
         </View>
@@ -178,31 +234,76 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   container: {
-    flexDirection: 'row',
-    width: '100%',
     flex: 1,
-    justifyContent: 'space-between',
+    width: "100%",
   },
-  card: {
-    width: "50%",
-    maxWidth: 520,
-    gap: 14,
-    marginRight: 16,
+
+  commandBar: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 10,
+    flexWrap: "wrap",
   },
+  commandChip: {
+    backgroundColor: "#111827",
+    borderWidth: 1,
+    borderColor: "#1f2937",
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+  },
+  activeChip: {
+    backgroundColor: "#22c55e",
+    borderColor: "#22c55e",
+  },
+  filterText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  metricsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 18,
+  },
+  metricText: {
+    color: "#94a3b8",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  mainLayout: {
+    flexDirection: "row",
+    gap: 28,
+    flex: 1,
+  },
+  leftPanel: {
+    flex: 0.9,
+    maxWidth: 620,
+  },
+  rightPanel: {
+    flex: 1.1,
+    minWidth: 520,
+  },
+
   title: {
     color: "#fff",
     fontSize: 36,
     fontWeight: "900",
     textAlign: "center",
+    marginBottom: 26,
   },
   sectionTitle: {
     color: "#94a3b8",
     fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 10,
-    marginTop: 8,
+    fontWeight: "800",
+    marginBottom: 12,
   },
-  
+  inboxContainer: {
+    gap: 14,
+  },
+
   notificationCard: {
     backgroundColor: "#111827",
     borderRadius: 18,
@@ -211,143 +312,140 @@ const styles = StyleSheet.create({
     borderColor: "#1f2937",
     gap: 12,
   },
-  
+  activeCard: {
+    borderColor: "#22c55e",
+    borderWidth: 2,
+  },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  
   sender: {
     color: "#fff",
     fontSize: 17,
-    fontWeight: "800",
+    fontWeight: "900",
     flex: 1,
     paddingRight: 12,
   },
-  
   content: {
     color: "#cbd5e1",
     fontSize: 15,
     lineHeight: 22,
   },
-  
+
   badge: {
-    backgroundColor: "#1e293b",
+    backgroundColor: "#334155",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
   },
-  
-  badgeHigh: {
-    backgroundColor: "#7f1d1d",
+  badgeUrgent: {
+    backgroundColor: "#ef4444",
   },
-  
+  badgeWaiting: {
+    backgroundColor: "#fbbf24",
+  },
+  badgeResponded: {
+    backgroundColor: "#22c55e",
+  },
+  badgeFailed: {
+    backgroundColor: "#450a0a",
+    borderWidth: 1,
+    borderColor: "#ef4444",
+  },
   badgeText: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
   },
-  
-  // Status Badges
-  statusBadge: {
-    marginTop: 10,
-    padding: 6,
-    borderRadius: 5,
-  },
 
-  badgeNew: {
-    backgroundColor: "#1e40af", // Blue for new
-  },
-  
-  badgeDraft: {
-    backgroundColor: "#6b21a8", // Purple for draft
-  },
-  
-  badgeSent: {
-    backgroundColor: "#22c55e", // Green for sent
-  },
-
-  // Agent Panel Styles
-  agentPanel: {
-    width: "50%",
-    maxWidth: 600,
-    padding: 10,
+  agentCard: {
+    flex: 1,
     backgroundColor: "#1F1F28",
-    borderRadius: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#1e293b",
+    padding: 20,
   },
-  
   agentTitle: {
     color: "#E5E7EB",
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 22,
+    fontWeight: "900",
+    marginBottom: 12,
   },
-
   messagesContainer: {
-    maxHeight: 400, // Set height to enable scrolling
-    marginBottom: 10,
+    flex: 1,
+    marginBottom: 12,
   },
 
   messageBubble: {
-    marginTop: 5,
-    padding: 10,
-    borderRadius: 10,
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 14,
+    maxWidth: "82%",
   },
-
-  assistantBubble: {
-    backgroundColor: "#3A3A3E",
+  assistantBubbleSent: {
+    backgroundColor: "#22c55e",
     alignSelf: "flex-end",
   },
-
+  assistantBubbleDraft: {
+    backgroundColor: "#6b21a8",
+    alignSelf: "flex-end",
+  },
   incomingBubble: {
     backgroundColor: "#2B2B2E",
     alignSelf: "flex-start",
   },
-
   messageText: {
     color: "#fff",
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  statusText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "900",
+    marginTop: 5,
   },
 
   composer: {
-    padding: 10,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: "#334155",
   },
-
+  inputRow: {
+    marginBottom: 10,
+  },
   input: {
-    minHeight: 40,
+    minHeight: 44,
     borderWidth: 1,
     borderColor: "#334155",
     backgroundColor: "#0b1120",
     color: "#fff",
     borderRadius: 12,
-    paddingHorizontal: 10,
-    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-
   actionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   aiButton: {
-    backgroundColor: "#10B98120",
-    padding: 10,
-    borderRadius: 10,
+    backgroundColor: "#064e3b",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
   },
-
   sendButton: {
     backgroundColor: "#22c55e",
-    padding: 10,
-    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 12,
   },
-
   buttonText: {
     color: "#fff",
-    fontWeight: "700",
+    fontWeight: "900",
   },
 });
-
-
-
