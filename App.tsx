@@ -96,6 +96,13 @@ const hasUnreadInbound = (messages) => {
   );
 };
 
+const isOperatorEvent = (message) => {
+  return (
+    message.role === "assistant" &&
+    message.status === "sent"
+  );
+};
+
 export default function App() {
   const [conversations, setConversations] = React.useState(initialConversations);
   const [selectedId, setSelectedId] = React.useState("1");
@@ -516,7 +523,7 @@ export default function App() {
 
         {/* Developer Only Button */}
         <TouchableOpacity style={styles.devButton} onPress={simulateNotification}>
-          <Text style={styles.buttonText}>Simulate Notification</Text>
+          <Text style={styles.buttonText}>Simulate New Lead</Text>
         </TouchableOpacity>
 
         {/* Main Content Layout */}
@@ -525,10 +532,18 @@ export default function App() {
           <View style={styles.leftPanel}>
             <View style={styles.headerRow}>
               <View>
-                <Text style={styles.title}>Searlio Next</Text>
-            
+                <Text style={styles.title}>
+                  Searlio Operator
+                </Text>
+              
+                <Text style={styles.subtitle}>
+                  AI-assisted lead response console
+                </Text>
+              
                 <Text style={styles.backendBadge}>
-                  {backendOnline ? "Backend connected" : "Demo data"}
+                  {backendOnline
+                    ? "Live backend connected"
+                    : "Demo mode"}
                 </Text>
               </View>
             
@@ -542,7 +557,18 @@ export default function App() {
               
             <Text style={styles.sectionTitle}>Pending Inbox</Text>
             <View style={styles.inboxContainer}>
-              {filterConversations().map((conversation) => {
+              {filterConversations().length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateTitle}>
+                    No active conversations
+                  </Text>
+              
+                  <Text style={styles.emptyStateText}>
+                    New leads and notifications will appear here.
+                  </Text>
+                </View>
+              ) : (
+                filterConversations().map((conversation) => {
                 const conversationStatus = getConversationStatus(conversation.messages);
                 return (
                   <TouchableOpacity
@@ -575,134 +601,182 @@ export default function App() {
                         </Text>
                       </View>
                     </View>
-                    <Text style={styles.content}>{conversation.messages[0]?.text || 'No messages yet'}</Text>
+                    <Text style={styles.content}>
+                      {
+                        [...conversation.messages]
+                          .filter((m) => m.status !== "draft")
+                          .sort(
+                            (a, b) =>
+                              new Date(b.createdAt || 0).getTime() -
+                              new Date(a.createdAt || 0).getTime()
+                          )[0]?.text || "No messages yet"
+                      }
+                    </Text>
+                    <Text style={styles.cardTime}>
+                      {formatMessageTime(
+                        [...conversation.messages]
+                          .sort(
+                            (a, b) =>
+                              new Date(b.createdAt || 0).getTime() -
+                              new Date(a.createdAt || 0).getTime()
+                          )[0]?.createdAt
+                      )}
+                    </Text>
                   </TouchableOpacity>
-                );
-              })}
+                )                
+              })
+            )}
             </View>
           </View>
 
           {/* RIGHT Panel */}
-                             <View style={styles.rightPanel}>
-                               <View style={styles.agentCard}>
-                                 <Text style={styles.agentTitle}>{selectedConversation.sender}</Text>
-                                 <ScrollView
-                                   ref={scrollRef}
-                                   style={styles.messagesContainer}
-                                   onContentSizeChange={() =>
-                                     scrollRef.current?.scrollToEnd({ animated: true })
-                                   }
-                                 >
-                                   {[...selectedConversation.messages]
-                                     .sort((a, b) => {
-                                       // Drafts always last
-                                       if (a.status === "draft") return 1;
-                                       if (b.status === "draft") return -1;
-                                 
-                                       // Sent assistant messages near bottom
-                                       if (a.status === "sent" && b.role !== "assistant") return 1;
-                                       if (b.status === "sent" && a.role !== "assistant") return -1;
-                                 
-                                       return new Date(a.createdAt || 0).getTime() -
-                                              new Date(b.createdAt || 0).getTime();
-                                     })
-                                     .map((message) => {
-                                       if (message.status === "draft") {
-                                         return null;
-                                       }
-                                 
-                                       return (
-                                         <View key={message.id}>
-                                           <View
-                                             style={[
-                                               styles.messageBubble,
-                                               message.role === "assistant"
-                                                 ? message.status === "sent"
-                                                   ? styles.assistantBubbleSent
-                                                   : styles.assistantBubbleDraft
-                                                 : styles.incomingBubble,
-                                             ]}
-                                           >
-                                             <Text style={styles.messageText}>
-                                               {message.text}
-                                             </Text>
-                                             {message.createdAt ? (
-                                               <Text style={styles.messageTime}>
-                                                 {formatMessageTime(message.createdAt)}
-                                               </Text>
-                                             ) : null}
-                                             {message.role === "assistant" && message.status && (
-                                               <Text style={styles.statusText}>
-                                                 {message.status.toUpperCase()}
-                                               </Text>
-                                             )}
-                                           </View>
-                                         </View>
-                                       );
-                                     })}
-                                 </ScrollView>
-                   
-                                 {/* Composer Area */}
-                                 <View style={styles.composer}>
-                                   {draft.trim() ? (
-                                     <View style={styles.activeDraftPreview}>
-                                       <Text style={styles.activeDraftLabel}>
-                                         ACTIVE DRAFT
-                                       </Text>
-                                   
-                                       <Text style={styles.activeDraftText}>
-                                         {draft}
-                                       </Text>
-                                     </View>
-                                   ) : null}
-                                   <View style={styles.inputRow}>
-                                     <TextInput
-                                       style={styles.input}
-                                       placeholder="Edit active draft..."
-                                       value={draft}
-                                       onChangeText={(text) => {
-                                         setDraft(text);
-                                       
-                                         setConversations((prev) => {
-                                           const updatedMessages =
-                                             prev[selectedConversation.id].messages.map(
-                                               (msg) =>
-                                                 msg.status === "draft"
-                                                   ? {
-                                                       ...msg,
-                                                       text,
-                                                     }
-                                                   : msg
-                                             );
-                                       
-                                           return {
-                                             ...prev,
-                                             [selectedConversation.id]: {
-                                               ...prev[selectedConversation.id],
-                                               messages: updatedMessages,
-                                             },
-                                           };
-                                         });
-                                       }}
-                                     />
-                                   </View>
-                                   <View style={styles.actionRow}>
-                                     <TouchableOpacity style={styles.aiButton} onPress={handleGenerateAI}>
-                                       <Text style={styles.buttonText}>Generate AI</Text>
-                                     </TouchableOpacity>
-                                     <TouchableOpacity
-                                       style={styles.clearButton}
-                                       onPress={clearDraft}
-                                     >
-                                       <Text style={styles.buttonText}>Clear</Text>
-                                     </TouchableOpacity>
-                                     <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-                                       <Text style={styles.buttonText}>Send</Text>
-                                     </TouchableOpacity>
-                                   </View>
-                                 </View>
-                               </View>
-                             </View>
+          <View style={styles.rightPanel}>
+            {selectedConversation ? (
+              <>
+                {/* Existing conversation UI */}
+                <View style={styles.agentCard}>
+                  <Text style={styles.agentTitle}>{selectedConversation.sender}</Text>
+                  <ScrollView
+                    ref={scrollRef}
+                    style={styles.messagesContainer}
+                    onContentSizeChange={() =>
+                      scrollRef.current?.scrollToEnd({ animated: true })
+                    }
+                  >
+                    {[...selectedConversation.messages]
+                      .sort((a, b) => {
+                        // Drafts always last
+                        if (a.status === "draft") return 1;
+                        if (b.status === "draft") return -1;
+                        
+                        // Sent assistant messages near bottom
+                        if (a.status === "sent" && b.role !== "assistant") return 1;
+                        if (b.status === "sent" && a.role !== "assistant") return -1;
+                        
+                        return new Date(a.createdAt || 0).getTime() -
+                               new Date(b.createdAt || 0).getTime();
+                      })
+                      .map((message) => {
+                        if (message.status === "draft") {
+                          return null;
+                        }
+                        
+                        if (isOperatorEvent(message)) {
+                          return (
+                            <View
+                              key={message.id}
+                              style={styles.operatorEvent}
+                            >
+                              <Text style={styles.operatorEventText}>
+                                Reply sent •{" "}
+                                {formatMessageTime(message.createdAt)}
+                              </Text>
+                            </View>
+                          );
+                        }
+                        
+                        return (
+                          <View key={message.id}>
+                            <View
+                              style={[
+                                styles.messageBubble,
+                                message.role === "assistant"
+                                  ? message.status === "sent"
+                                    ? styles.assistantBubbleSent
+                                    : styles.assistantBubbleDraft
+                                  : styles.incomingBubble,
+                              ]}
+                            >
+                              <Text style={styles.messageText}>
+                                {message.text}
+                              </Text>
+                              {message.createdAt ? (
+                                <Text style={styles.messageTime}>
+                                  {formatMessageTime(message.createdAt)}
+                                </Text>
+                              ) : null}
+                              {message.role === "assistant" && message.status && (
+                                <Text style={styles.statusText}>
+                                  {message.status.toUpperCase()}
+                                </Text>
+                              )}
+                            </View>
+                          </View>
+                        );
+                      })}
+                  </ScrollView>
+          
+                  {/* Composer Area */}
+                  <View style={styles.composer}>
+                    {draft.trim() ? (
+                      <View style={styles.activeDraftPreview}>
+                        <Text style={styles.activeDraftLabel}>
+                          ACTIVE DRAFT
+                        </Text>
+                        <Text style={styles.activeDraftText}>
+                          {draft}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <View style={styles.inputRow}>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Edit active draft..."
+                        value={draft}
+                        onChangeText={(text) => {
+                          setDraft(text);
+                        
+                          setConversations((prev) => {
+                            const updatedMessages =
+                              prev[selectedConversation.id].messages.map(
+                                (msg) =>
+                                  msg.status === "draft"
+                                    ? {
+                                        ...msg,
+                                        text,
+                                      }
+                                    : msg
+                              );
+                        
+                            return {
+                              ...prev,
+                              [selectedConversation.id]: {
+                                ...prev[selectedConversation.id],
+                                messages: updatedMessages,
+                              },
+                            };
+                          });
+                        }}
+                      />
+                    </View>
+                    <View style={styles.actionRow}>
+                      <TouchableOpacity style={styles.aiButton} onPress={handleGenerateAI}>
+                        <Text style={styles.buttonText}>Generate AI</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.clearButton}
+                        onPress={clearDraft}
+                      >
+                        <Text style={styles.buttonText}>Clear</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+                        <Text style={styles.buttonText}>Send</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <View style={styles.emptyConversation}>
+                <Text style={styles.emptyConversationTitle}>
+                  No conversation selected
+                </Text>
+                <Text style={styles.emptyConversationText}>
+                  Select a lead or notification to begin.
+                </Text>
+              </View>
+            )}
+          </View>
                            </View>
                          </View>
                        </SafeAreaView>
@@ -1039,6 +1113,62 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 12,
+  },
+  operatorEvent: {
+    alignItems: "center",
+    marginVertical: 10,
+  },
+  
+  operatorEventText: {
+    color: "#64748B",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+  cardTime: {
+    color: "#64748B",
+    fontSize: 11,
+    marginTop: 6,
+    fontWeight: "600",
+  },
+  emptyState: {
+    paddingVertical: 40,
+    alignItems: "center",
+  },
+  
+  emptyStateTitle: {
+    color: "#E2E8F0",
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  
+  emptyStateText: {
+    color: "#64748B",
+    fontSize: 13,
+    textAlign: "center",
+    maxWidth: 220,
+    lineHeight: 20,
+  },
+  emptyConversation: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  
+  emptyConversationTitle: {
+    color: "#E2E8F0",
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+  
+  emptyConversationText: {
+    color: "#64748B",
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 22,
   },
 });
  
