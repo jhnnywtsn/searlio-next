@@ -1,4 +1,11 @@
 import React from "react";
+// SEARLIO EDITING RULES
+// - Keep edits small.
+// - Do not remove backend hydration.
+// - Do not duplicate draft UI.
+// - Thread shows history only.
+// - Composer owns active draft.
+// - Always check JSX closing tags.
 import {
   SafeAreaView,
   StyleSheet,
@@ -60,7 +67,11 @@ type BackendNotification = {
 };
 
 const normalizeBackendNotification = (n: BackendNotification) => {
-  const title = n.sender || n.title || n.app_name || "Unknown";
+  const title =
+    n.sender ||
+    n.title ||
+    n.extra_data?.raw_title ||
+    "Unknown";
   const message = n.content || n.extra_data?.raw_content || "";
 
   return {
@@ -80,6 +91,7 @@ const normalizeBackendNotification = (n: BackendNotification) => {
       },
     ],
     draft: "",
+    sourceApp: n.app_name || n.app_package || "Unknown app", // Added this line
   };
 };
 
@@ -413,61 +425,60 @@ export default function App() {
   // ======================
 
   const hydrateNotifications = async () => {
-    const res = await fetch(`${BACKEND_URL}/api/notifications`);
-
-    if (!res.ok) {
-      throw new Error(`Backend returned ${res.status}`);
-    }
-
-    const data = await res.json();
-
-    const hydratedArray = data
-      .sort(
-        (a, b) =>
-          new Date(b.created_at || 0).getTime() -
-          new Date(a.created_at || 0).getTime()
-      )
-      .filter((item) => item && item.id)
-      .filter((item) => item.content || item.extra_data?.raw_content)
-      .filter(
-        (item) =>
-          item.app_package !== "org.telegram.messenger"
-      )
-      .map(normalizeBackendNotification);
-
-    if (hydratedArray.length > 0) {
-      const hydratedObject = hydratedArray.reduce(
-        (acc, conversation) => {
-          const existing = conversations[conversation.id];
-
-          acc[conversation.id] = existing
-            ? {
-                ...conversation,
-                messages:
-                  existing.messages.length >
-                  conversation.messages.length
-                    ? existing.messages
-                    : conversation.messages,
-              }
-            : conversation;
-
-          return acc;
-        },
-        {}
-      );
-
-      setConversations(hydratedObject);
-
-      setSelectedId((prev) =>
-        hydratedObject[prev]
-          ? prev
-          : hydratedArray[0].id
-      );
-
-      setBackendOnline(true);
-    }
-  };
-
+      const res = await fetch(`${BACKEND_URL}/api/notifications`);
+  
+      if (!res.ok) {
+        throw new Error(`Backend returned ${res.status}`);
+      }
+  
+      const data = await res.json();
+  
+      const hydratedArray = data
+        .sort(
+          (a, b) =>
+            new Date(b.created_at || 0).getTime() -
+            new Date(a.created_at || 0).getTime()
+        )
+        .filter((item) => item && item.id)
+        .filter((item) => item.content || item.extra_data?.raw_content)
+        .filter((item) => 
+            item.app_package !== "org.telegram.messenger" &&
+            item.app_package !== "another.package.to.exclude" // Exclude additional packages here
+        )
+        .map(normalizeBackendNotification);
+  
+      if (hydratedArray.length > 0) {
+        const hydratedObject = hydratedArray.reduce(
+          (acc, conversation) => {
+            const existing = conversations[conversation.id];
+  
+            acc[conversation.id] = existing
+              ? {
+                  ...conversation,
+                  messages:
+                    existing.messages.length >
+                    conversation.messages.length
+                      ? existing.messages
+                      : conversation.messages,
+                }
+              : conversation;
+  
+            return acc;
+          },
+          {}
+        );
+  
+        setConversations(hydratedObject);
+  
+        setSelectedId((prev) =>
+          hydratedObject[prev]
+            ? prev
+            : hydratedArray[0].id
+        );
+  
+        setBackendOnline(true);
+      }
+    };
   const refreshFromBackend = async () => {
    try {
      await hydrateNotifications();
@@ -564,7 +575,7 @@ export default function App() {
         {/* Main Content Layout */}
         <View style={styles.mainLayout}>
           {/* LEFT Panel */}
-                    {/* LEFT Panel */}
+          <ScrollView style={styles.leftPanel}>
           <View style={styles.leftPanel}>
             <View style={styles.headerRow}>
               <View>
@@ -628,6 +639,10 @@ export default function App() {
                             <View style={styles.unreadDot} />
                           )}
                         </View>
+                        {/* Added sourceApp text here */}
+                            <Text style={styles.sourceAppText}>
+                              {conversation.sourceApp}
+                            </Text>
                         <View style={[
                           styles.badge,
                           conversationStatus === "urgent" && styles.badgeUrgent,
@@ -667,6 +682,7 @@ export default function App() {
               )}
             </View>
           </View>
+          </ScrollView>
           {/* RIGHT Panel */}
           <View style={styles.rightPanel}>
             {selectedConversation ? (
@@ -904,6 +920,8 @@ const styles = StyleSheet.create({
   },
   inboxContainer: {
     gap: 14,
+    flex: 1,
+    paddingRight: 14,
   },
 
   notificationCard: {
@@ -1248,6 +1266,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     marginTop: 6,
+  },
+  sourceAppText: {
+    color: "#64748B",
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 4,
   },
 });
  
