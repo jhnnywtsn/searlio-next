@@ -1,6 +1,9 @@
 import React from "react";
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View, TextInput, ScrollView } from "react-native";
 
+const BACKEND_URL =
+  process.env.EXPO_PUBLIC_BACKEND_URL || "https://searlio.com";
+
 const initialConversations = {
   "1": {
     id: "1",
@@ -35,13 +38,60 @@ const getConversationStatus = (messages) => {
   return 'new';
 };
 
+type BackendNotification = {
+  id: string;
+  app_name?: string;
+  app_package?: string;
+  title?: string;
+  sender?: string;
+  content?: string;
+  category?: string;
+  status?: string;
+  created_at?: string;
+  extra_data?: Record<string, any>;
+};
+
+const normalizeBackendNotification = (n: BackendNotification) => {
+  const title = n.sender || n.title || n.app_name || "Unknown";
+  const message = n.content || n.extra_data?.raw_content || "";
+
+  return {
+    id: n.id,
+    sender: title,
+    preview: message || "No message content",
+    channel: n.category || "notification",
+    status: n.status || "pending",
+    priority: n.category === "lead" || title.toLowerCase().includes("lead") ? "high" : "normal",
+    createdAt: n.created_at || new Date().toISOString(),
+    messages: [
+      {
+        id: `${n.id}-incoming`,
+        role: "customer",
+        text: message || "No message content",
+        createdAt: n.created_at || new Date().toISOString(),
+      },
+    ],
+    draft: "",
+  };
+};
+
 export default function App() {
   const [conversations, setConversations] = React.useState(initialConversations);
   const [selectedId, setSelectedId] = React.useState("1");
   const [draft, setDraft] = React.useState("");
   const [filter, setFilter] = React.useState("All");
+  const [backendOnline, setBackendOnline] = React.useState(false);
+  const [isGenerating, setIsGenerating] = React.useState(false);
+  const [isSending, setIsSending] = React.useState(false);
+  const [sendError, setSendError] = React.useState("");
 
-  const selectedConversation = conversations[selectedId];
+  const selectedConversation =
+    conversations[selectedId] ||
+    Object.values(conversations)[0];
+
+  if (!selectedConversation) {
+    return null;
+  }
 
   // Function to filter conversations based on the selected filter
   const filterConversations = () => {
@@ -51,79 +101,155 @@ export default function App() {
     });
   };
 
- const handleGenerateAI = () => {
-   const aiText =
-     "Thanks for reaching out — I can help with that. What’s the best number to reach you?";
- 
-   setDraft(aiText);
- 
-   setConversations((prev) => {
-     const existingMessages = prev[selectedId].messages;
-     const hasDraft = existingMessages.some((msg) => msg.status === "draft");
- 
-     const updatedMessages = hasDraft
-       ? existingMessages.map((msg) =>
-           msg.status === "draft"
-             ? { ...msg, text: aiText, status: "draft" }
-             : msg
-         )
-       : [
-           ...existingMessages,
-           {
-             id: `m${Date.now()}`,
-             role: "assistant",
-             text: aiText,
-             status: "draft",
-           },
-         ];
- 
-     return {
-       ...prev,
-       [selectedId]: {
-         ...prev[selectedId],
-         messages: updatedMessages,
-       },
-     };
-   });
- };
-  const handleSend = () => {
+  const handleGenerateAI = async () => {
+    if (!selectedConversation?.id || isGenerating) return;
+    setIsGenerating(true);
+  
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/llm/generate-reply/${selectedConversation.id}`,
+        {
+          method: "POST",
+        }
+      );
+  
+      if (!res.ok) {
+        throw new Error(`Generate failed: ${res.status}`);
+      }
+  
+      const data = await res.json();
+  
+      const aiText =
+        data.content ||
+        data.reply ||
+        data.generated_reply ||
+        data.text ||
+        "Unable to generate reply.";
+  
+      setDraft(aiText);
+  
+      setConversations((prev) => {
+        const existingMessages =
+          prev[selectedConversation.id].messages;
+  
+        const hasDraft = existingMessages.some(
+          (msg) => msg.status === "draft"
+        );
+  
+        const updatedMessages = hasDraft
+          ? existingMessages.map((msg) =>
+              msg.status === "draft"
+                ? {
+                    ...msg,
+                    text: aiText,
+                    status: "draft",
+                  }
+                : msg
+            )
+          : [
+              ...existingMessages,
+              {
+                id: `draft-${Date.now()}`,
+                role: "assistant",
+                text: aiText,
+                status: "draft",
+              },
+            ];
+  
+        return {
+          ...prev,
+          [selectedConversation.id]: {
+            ...prev[selectedConversation.id],
+            messages: updatedMessages,
+          },
+        };
+      });
+    } catch (err) {
+      console.log("AI generation failed:", err);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!selectedConversation?.id) return;
+
+    if (isSending) return;
+    
+    setIsSending(true);
+    setSendError("");
+  
     const textToSend =
       draft.trim() ||
-      selectedConversation.messages.find((msg) => msg.status === "draft")?.text ||
+      selectedConversation.messages.find(
+        (msg) => msg.status === "draft"
+      )?.text ||
       "";
   
     if (!textToSend.trim()) return;
   
-    setConversations((prev) => {
-      const updatedMessages = prev[selectedId].messages.map((msg) =>
-        msg.status === "draft"
-          ? { ...msg, text: textToSend.trim(), status: "sent" }
-          : msg
+    try {
+      const createRes = await fetch(
+        `${BACKEND_URL}/api/notifications/${selectedConversation.id}/reply`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            content: textToSend.trim(),
+          }),
+        }
       );
   
-      const hadDraft = prev[selectedId].messages.some((msg) => msg.status === "draft");
+      if (!createRes.ok) {
+        throw new Error(
+          `Reply create failed: ${createRes.status}`
+        );
+      }
   
-      return {
-        ...prev,
-        [selectedId]: {
-          ...prev[selectedId],
-          messages: hadDraft
-            ? updatedMessages
-            : [
-                ...updatedMessages,
-                {
-                  id: `m${Date.now()}`,
-                  role: "assistant",
-                  text: textToSend.trim(),
-                  status: "sent",
-                },
-              ],
-        },
-      };
-    });
+      const createdReply = await createRes.json();
   
-    setDraft("");
+      if (createdReply?.id) {
+        await fetch(
+          `${BACKEND_URL}/api/replies/${createdReply.id}/delivered`,
+          {
+            method: "PATCH",
+          }
+        );
+      }
+  
+      setConversations((prev) => {
+        const updatedMessages =
+          prev[selectedConversation.id].messages.map(
+            (msg) =>
+              msg.status === "draft"
+                ? {
+                    ...msg,
+                    text: textToSend.trim(),
+                    status: "sent",
+                  }
+                : msg
+          );
+  
+        return {
+          ...prev,
+          [selectedConversation.id]: {
+            ...prev[selectedConversation.id],
+            messages: updatedMessages,
+          },
+        };
+      });
+  
+      setDraft("");
+    } catch (err) {
+      console.log("Send failed:", err);
+      setSendError("Send failed. Check backend route or reply payload.");
+    } finally {
+      setIsSending(false);
+    }
   };
+
   // Metrics Calculation
   const getMetrics = () => {
     const totalPending = Object.values(conversations).filter(c => getConversationStatus(c.messages) === "waiting").length;
@@ -135,10 +261,99 @@ export default function App() {
 
   const { totalPending, totalSent, totalFailed } = getMetrics();
 
+  React.useEffect(() => {
+    const initialHydration = async () => {
+      try {
+        await hydrateNotifications();
+      } catch (err) {
+        console.log("Backend hydration skipped:", err);
+        setBackendOnline(false);
+      }
+    };
+  
+    initialHydration();
+  }, []);
+
+  React.useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        await hydrateNotifications();
+      } catch (err) {
+        console.log("Polling failed:", err);
+      }
+    }, 10000);
+  
+    return () => clearInterval(interval);
+  }, [conversations]);
+  
+  const hydrateNotifications = async () => {
+    const res = await fetch(`${BACKEND_URL}/api/notifications`);
+  
+    if (!res.ok) {
+      throw new Error(`Backend returned ${res.status}`);
+    }
+  
+    const data = await res.json();
+  
+    const hydratedArray = data
+      .sort(
+        (a, b) =>
+          new Date(b.created_at || 0).getTime() -
+          new Date(a.created_at || 0).getTime()
+      )
+      .filter((item) => item && item.id)
+      .filter((item) => item.content || item.extra_data?.raw_content)
+      .filter(
+        (item) =>
+          item.app_package !== "org.telegram.messenger"
+      )
+      .map(normalizeBackendNotification);
+  
+    if (hydratedArray.length > 0) {
+      const hydratedObject = hydratedArray.reduce(
+        (acc, conversation) => {
+          const existing = conversations[conversation.id];
+  
+          acc[conversation.id] = existing
+            ? {
+                ...conversation,
+                messages:
+                  existing.messages.length >
+                  conversation.messages.length
+                    ? existing.messages
+                    : conversation.messages,
+              }
+            : conversation;
+  
+          return acc;
+        },
+        {}
+      );
+  
+      setConversations(hydratedObject);
+  
+      setSelectedId((prev) =>
+        hydratedObject[prev]
+          ? prev
+          : hydratedArray[0].id
+      );
+  
+      setBackendOnline(true);
+    }
+  };
+  
+ const refreshFromBackend = async () => {
+   try {
+     await hydrateNotifications();
+   } catch (err) {
+     console.log("Manual refresh failed:", err);
+     setBackendOnline(false);
+   }
+ };
+ 
   return (
     <SafeAreaView style={styles.page}>
       <View style={styles.container}>
-        
         {/* Compact Command Bar for Filters */}
         <View style={styles.commandBar}>
           {["All", "Urgent", "Waiting", "Responded", "Failed"].map((status) => {
@@ -178,7 +393,23 @@ export default function App() {
         <View style={styles.mainLayout}>
           {/* LEFT Panel */}
           <View style={styles.leftPanel}>
-            <Text style={styles.title}>Searlio Next</Text>
+            <View style={styles.headerRow}>
+              <View>
+                <Text style={styles.title}>Searlio Next</Text>
+            
+                <Text style={styles.backendBadge}>
+                  {backendOnline ? "Backend connected" : "Demo data"}
+                </Text>
+              </View>
+            
+              <TouchableOpacity
+                style={styles.refreshButton}
+                onPress={refreshFromBackend}
+              >
+                <Text style={styles.refreshText}>Refresh</Text>
+              </TouchableOpacity>
+            </View>
+              
             <Text style={styles.sectionTitle}>Pending Inbox</Text>
             <View style={styles.inboxContainer}>
               {filterConversations().map((conversation) => {
@@ -253,12 +484,27 @@ export default function App() {
                     onChangeText={setDraft}
                   />
                 </View>
+                {sendError ? (
+                  <Text style={styles.errorText}>{sendError}</Text>
+                ) : null}
                 <View style={styles.actionRow}>
-                  <TouchableOpacity style={styles.aiButton} onPress={handleGenerateAI}>
-                    <Text style={styles.buttonText}>Generate AI</Text>
+                  <TouchableOpacity
+                    style={[styles.aiButton, isGenerating && styles.disabledButton]}
+                    onPress={handleGenerateAI}
+                    disabled={isGenerating}
+                  >
+                    <Text style={styles.buttonText}>
+                      {isGenerating ? "Generating..." : "Generate AI"}
+                    </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-                    <Text style={styles.buttonText}>Send</Text>
+                  <TouchableOpacity
+                    style={[styles.sendButton, isSending && styles.disabledButton]}
+                    onPress={handleSend}
+                    disabled={isSending}
+                  >
+                    <Text style={styles.buttonText}>
+                      {isSending ? "Sending..." : "Send"}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -491,4 +737,43 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "900",
   },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 24,
+  },
+  
+  backendBadge: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#94A3B8",
+  },
+  
+  refreshButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "#1E293B",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  
+  refreshText: {
+    color: "#E5E7EB",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  disabledButton: {
+    opacity: 0.55,
+  },
+  errorText: {
+    color: "#FCA5A5",
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
 });
+ 
+
