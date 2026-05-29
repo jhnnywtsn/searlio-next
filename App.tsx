@@ -91,7 +91,7 @@ const normalizeBackendNotification = (n: BackendNotification) => {
       },
     ],
     draft: "",
-    sourceApp: n.app_name || n.app_package || "Unknown app", // Added this line
+    sourceApp: n.app_name || n.app_package || "Unknown app",
   };
 };
 
@@ -128,7 +128,8 @@ export default function App() {
   const [filter, setFilter] = React.useState("All");
   const [backendOnline, setBackendOnline] = React.useState(false);
   const scrollRef = React.useRef(null);
-
+  const [autoFocusNewest, setAutoFocusNewest] = React.useState(true);
+  const [sendError, setSendError] = React.useState("");
   const clearDraft = () => {
     setDraft("");
   
@@ -148,7 +149,7 @@ export default function App() {
     });
   };
   
-  const selectedConversation =
+    const selectedConversation =
     conversations[selectedId] ||
     Object.values(conversations)[0];
 
@@ -160,63 +161,33 @@ export default function App() {
   const filterConversations = () => {
     return Object.values(conversations)
       .filter((conversation) => {
-        const status = getConversationStatus(
-          conversation.messages
-        );
-  
+        const status = getConversationStatus(conversation.messages);
         return (
           filter === "All" ||
           status === filter.toLowerCase()
         );
       })
       .sort((a, b) => {
-        const aHasDraft = a.messages.some(
-          (m) => m.status === "draft"
-        );
-  
-        const bHasDraft = b.messages.some(
-          (m) => m.status === "draft"
-        );
-  
+        const aHasDraft = a.messages.some((m) => m.status === "draft");
+        const bHasDraft = b.messages.some((m) => m.status === "draft");
+
         if (aHasDraft && !bHasDraft) return -1;
         if (bHasDraft && !aHasDraft) return 1;
-  
-        const aHasInbound = a.messages.some(
-          (m) =>
-            m.role !== "assistant" &&
-            m.status === "inbound"
-        );
-  
-        const bHasInbound = b.messages.some(
-          (m) =>
-            m.role !== "assistant" &&
-            m.status === "inbound"
-        );
-  
+
+        const aHasInbound = a.messages.some((m) => m.role !== "assistant" && m.status === "inbound");
+        const bHasInbound = b.messages.some((m) => m.role !== "assistant" && m.status === "inbound");
+
         if (aHasInbound && !bHasInbound) return -1;
         if (bHasInbound && !aHasInbound) return 1;
-  
-        const aLatest = Math.max(
-          ...a.messages.map((m) =>
-            new Date(
-              m.createdAt || 0
-            ).getTime()
-          )
-        );
-  
-        const bLatest = Math.max(
-          ...b.messages.map((m) =>
-            new Date(
-              m.createdAt || 0
-            ).getTime()
-          )
-        );
-  
+
+        const aLatest = Math.max(...a.messages.map((m) => new Date(m.createdAt || 0).getTime()));
+        const bLatest = Math.max(...b.messages.map((m) => new Date(m.createdAt || 0).getTime()));
+
         return bLatest - aLatest;
       });
   };
 
-   // ======================
+  // ======================
   // ACTIONS
   // ======================
 
@@ -236,7 +207,6 @@ export default function App() {
       }
 
       const data = await res.json();
-
       const aiText =
         data.content ||
         data.reply ||
@@ -245,25 +215,12 @@ export default function App() {
         "Unable to generate reply.";
 
       setDraft(aiText);
-
       setConversations((prev) => {
-        const existingMessages =
-          prev[selectedConversation.id].messages;
-
-        const hasDraft = existingMessages.some(
-          (msg) => msg.status === "draft"
-        );
+        const existingMessages = prev[selectedConversation.id].messages;
+        const hasDraft = existingMessages.some((msg) => msg.status === "draft");
 
         const updatedMessages = hasDraft
-          ? existingMessages.map((msg) =>
-              msg.status === "draft"
-                ? {
-                    ...msg,
-                    text: aiText,
-                    status: "draft",
-                  }
-                : msg
-            )
+          ? existingMessages.map((msg) => (msg.status === "draft" ? { ...msg, text: aiText, status: "draft" } : msg))
           : [
               ...existingMessages,
               {
@@ -292,12 +249,11 @@ export default function App() {
 
     const textToSend =
       draft.trim() ||
-      selectedConversation.messages.find(
-        (msg) => msg.status === "draft"
-      )?.text ||
+      selectedConversation.messages.find((msg) => msg.status === "draft")?.text ||
       "";
 
     if (!textToSend.trim()) return;
+    setSendError("");
 
     try {
       const createRes = await fetch(
@@ -329,17 +285,11 @@ export default function App() {
       }
 
       setConversations((prev) => {
-        const updatedMessages =
-          prev[selectedConversation.id].messages.map(
-            (msg) =>
-              msg.status === "draft"
-                ? {
-                    ...msg,
-                    text: textToSend.trim(),
-                    status: "sent",
-                  }
-                : msg
-          );
+        const updatedMessages = prev[selectedConversation.id].messages.map((msg) =>
+          msg.status === "draft"
+            ? { ...msg, text: textToSend.trim(), status: "sent" }
+            : msg
+        );
 
         return {
           ...prev,
@@ -353,10 +303,11 @@ export default function App() {
       setDraft("");
     } catch (err) {
       console.log("Send failed:", err);
+      setSendError("Send failed. Reply was not recorded.");      
     }
   };
 
-  // ======================
+    // ======================
   // METRICS CALCULATION
   // ======================
 
@@ -425,77 +376,89 @@ export default function App() {
   // ======================
 
   const hydrateNotifications = async () => {
-      const res = await fetch(`${BACKEND_URL}/api/notifications`);
-  
-      if (!res.ok) {
-        throw new Error(`Backend returned ${res.status}`);
-      }
-  
-      const data = await res.json();
-  
-      const hydratedArray = data
+    const res = await fetch(`${BACKEND_URL}/api/notifications`);
+
+    if (!res.ok) {
+      throw new Error(`Backend returned ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    const hydratedArray = data
+      .sort(
+        (a, b) =>
+          new Date(b.created_at || 0).getTime() -
+          new Date(a.created_at || 0).getTime()
+      )
+      .filter((item) => item && item.id)
+      .filter((item) => item.content || item.extra_data?.raw_content)
+      .filter((item) =>
+        item.app_package !== "org.telegram.messenger" &&
+        item.app_package !== "another.package.to.exclude" // Exclude additional packages here
+      )
+      .map(normalizeBackendNotification);
+
+    if (hydratedArray.length > 0) {
+      const hydratedObject = hydratedArray.reduce(
+        (acc, conversation) => {
+          const existing = conversations[conversation.id];
+
+          acc[conversation.id] = existing
+            ? {
+                ...conversation,
+                messages:
+                  existing.messages.length >
+                  conversation.messages.length
+                    ? existing.messages
+                    : conversation.messages,
+              }
+            : conversation;
+
+          return acc;
+        },
+        {}
+      );
+
+      setConversations(hydratedObject);
+      const newestConversation = hydratedArray
         .sort(
           (a, b) =>
-            new Date(b.created_at || 0).getTime() -
-            new Date(a.created_at || 0).getTime()
-        )
-        .filter((item) => item && item.id)
-        .filter((item) => item.content || item.extra_data?.raw_content)
-        .filter((item) => 
-            item.app_package !== "org.telegram.messenger" &&
-            item.app_package !== "another.package.to.exclude" // Exclude additional packages here
-        )
-        .map(normalizeBackendNotification);
-  
-      if (hydratedArray.length > 0) {
-        const hydratedObject = hydratedArray.reduce(
-          (acc, conversation) => {
-            const existing = conversations[conversation.id];
-  
-            acc[conversation.id] = existing
-              ? {
-                  ...conversation,
-                  messages:
-                    existing.messages.length >
-                    conversation.messages.length
-                      ? existing.messages
-                      : conversation.messages,
-                }
-              : conversation;
-  
-            return acc;
-          },
-          {}
-        );
-  
-        setConversations(hydratedObject);
-  
-        setSelectedId((prev) =>
-          hydratedObject[prev]
-            ? prev
-            : hydratedArray[0].id
-        );
-  
-        setBackendOnline(true);
+            new Date(b.updatedAt || b.createdAt || 0).getTime() -
+            new Date(a.updatedAt || a.createdAt || 0).getTime()
+        )[0];
+
+      if (
+        autoFocusNewest &&
+        !draft.trim() &&
+        newestConversation &&
+        newestConversation.id !== selectedId
+      ) {
+        setSelectedId(newestConversation.id);
       }
-    };
+      setSelectedId((prev) =>
+        hydratedObject[prev]
+          ? prev
+          : hydratedArray[0].id
+      );
+
+      setBackendOnline(true);
+    }
+  };
+
   const refreshFromBackend = async () => {
-   try {
-     await hydrateNotifications();
-   } catch (err) {
-      
+    try {
+      await hydrateNotifications();
+    } catch (err) {
+      console.log("Manual refresh failed:", err);
+      setBackendOnline(false);
+    }
+  };
 
-
-     console.log("Manual refresh failed:", err);
-     setBackendOnline(false);
-   }
- };
-
-    // ======================
+  // ======================
   // SIMULATION
   // ======================
 
-  const simulateNotification = async () => {
+    const simulateNotification = async () => {
     try {
       const res = await fetch(
         `${BACKEND_URL}/api/simulate/notification?category=text`,
@@ -604,8 +567,7 @@ export default function App() {
                 <Text style={styles.refreshText}>Refresh</Text>
               </TouchableOpacity>
             </View>
-              
-            <Text style={styles.sectionTitle}>Pending Inbox</Text>
+             <Text style={styles.sectionTitle}>Pending Inbox</Text>
             <View style={styles.inboxContainer}>
               {filterConversations().length === 0 ? (
                 <View style={styles.emptyState}>
@@ -756,84 +718,77 @@ export default function App() {
                           </View>
                         </View>
                       );
-                    })}
-                </ScrollView>
 
-                {/* Composer Area */}
-                <View style={styles.composer}>
-                  {draft.trim() ? (
-                    <View style={styles.activeDraftPreview}>
-                      <Text style={styles.activeDraftLabel}>
-                        ACTIVE DRAFT
-                      </Text>
-                      <Text style={styles.activeDraftText}>
-                        {draft}
-                      </Text>
-                      <Text style={styles.draftHelper}>
-                        AI-generated draft • editable before send
-                      </Text>
+                      })}
+                  </ScrollView>
+
+                  <View style={styles.composer}>
+                    <View style={styles.inputRow}>
+                      <TextInput
+                        style={styles.input}
+                        value={draft}
+                        onChangeText={setDraft}
+                        placeholder="Edit active draft..."
+                        placeholderTextColor="#64748B"
+                        multiline
+                      />
                     </View>
-                  ) : null}
-                  <View style={styles.inputRow}>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Edit active draft..."
-                      value={draft}
-                      onChangeText={(text) => {
-                        setDraft(text);
-                        
-                        setConversations((prev) => {
-                          const updatedMessages =
-                            prev[selectedConversation.id].messages.map(
-                              (msg) =>
-                                msg.status === "draft"
-                                  ? {
-                                      ...msg,
-                                      text,
-                                    }
-                                  : msg
-                            );
 
-                          return {
-                            ...prev,
-                            [selectedConversation.id]: {
-                              ...prev[selectedConversation.id],
-                              messages: updatedMessages,
-                            },
-                          };
-                        });
-                      }}
-                    />
-                  </View>
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity
-                      style={styles.aiButton}
-                      onPress={handleGenerateAI}
-                    >
-                      <Text style={styles.buttonText}>
-                        Generate AI Reply
+                    {sendError ? (
+                      <Text style={styles.errorText}>
+                        {sendError}
                       </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.clearButton}
-                      onPress={clearDraft}
-                    >
-                      <Text style={styles.buttonText}>Clear</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-                      <Text style={styles.buttonText}>Send</Text>
-                    </TouchableOpacity>
+                    ) : null}
+
+                    <View style={styles.actionRow}>
+                      <TouchableOpacity
+                        style={styles.aiButton}
+                        onPress={handleGenerateAI}
+                      >
+                        <Text style={styles.buttonText}>
+                          Generate AI Reply
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.clearButton,
+                          !draft.trim() &&
+                            styles.disabledButton,
+                        ]}
+                        onPress={clearDraft}
+                        disabled={!draft.trim()}
+                      >
+                        <Text style={styles.buttonText}>
+                          Clear
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.sendButton,
+                          !draft.trim() &&
+                            styles.disabledButton,
+                        ]}
+                        onPress={handleSend}
+                        disabled={!draft.trim()}
+                      >
+                        <Text style={styles.buttonText}>
+                          Send
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
-              </View>
               </>
             ) : (
               <View style={styles.emptyConversation}>
                 <Text style={styles.emptyConversationTitle}>
                   No conversation selected
                 </Text>
+
                 <Text style={styles.emptyConversationText}>
-                  Select a lead or notification to begin.
+                  Select a conversation from the queue.
                 </Text>
               </View>
             )}
@@ -842,139 +797,138 @@ export default function App() {
       </View>
     </SafeAreaView>
   );
-}
-                     
+ }
 
-const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: "#0b0f14",
-    padding: 20,
-  },
-  container: {
-    flex: 1,
-    width: "100%",
-  },
-
-  commandBar: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 10,
-    flexWrap: "wrap",
-  },
-  commandChip: {
-    backgroundColor: "#111827",
-    borderWidth: 1,
-    borderColor: "#1f2937",
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-  },
-  activeChip: {
-    backgroundColor: "#22c55e",
-    borderColor: "#22c55e",
-  },
-  filterText: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-
-  metricsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 18,
-  },
-  metricText: {
-    color: "#94a3b8",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-
-  mainLayout: {
-    flexDirection: "row",
-    gap: 28,
-    flex: 1,
-  },
-  leftPanel: {
-    flex: 0.9,
-    maxWidth: 620,
-  },
-  rightPanel: {
-    flex: 1.1,
-    minWidth: 520,
-  },
-
-  title: {
-    color: "#fff",
-    fontSize: 36,
-    fontWeight: "900",
-    textAlign: "center",
-    marginBottom: 26,
-  },
-  sectionTitle: {
-    color: "#94a3b8",
-    fontSize: 14,
-    fontWeight: "800",
-    marginBottom: 12,
-  },
-  inboxContainer: {
-    gap: 14,
-    flex: 1,
-    paddingRight: 14,
-  },
-
-  notificationCard: {
-    backgroundColor: "#111827",
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#1f2937",
-    gap: 12,
-  },
-  activeCard: {
-    borderColor: "#22c55e",
-    borderWidth: 2,
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  sender: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "900",
-    flex: 1,
-    paddingRight: 12,
-  },
-  content: {
-    color: "#cbd5e1",
-    fontSize: 15,
-    lineHeight: 22,
-  },
-
-  badge: {
-    backgroundColor: "#334155",
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
-  },
-  badgeUrgent: {
-    backgroundColor: "#ef4444",
-  },
-  badgeWaiting: {
-    backgroundColor: "#fbbf24",
-  },
-  badgeResponded: {
-    backgroundColor: "#22c55e",
-  },
-  badgeFailed: {
-    backgroundColor: "#450a0a",
-    borderWidth: 1,
-    borderColor: "#ef4444",
-  },
-  badgeText: {
+  const styles = StyleSheet.create({
+    page: {
+      flex: 1,
+      backgroundColor: "#0b0f14",
+      padding: 20,
+    },
+    container: {
+      flex: 1,
+      width: "100%",
+    },
+  
+    commandBar: {
+      flexDirection: "row",
+      gap: 8,
+      marginBottom: 10,
+      flexWrap: "wrap",
+    },
+    commandChip: {
+      backgroundColor: "#111827",
+      borderWidth: 1,
+      borderColor: "#1f2937",
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+      borderRadius: 999,
+    },
+    activeChip: {
+      backgroundColor: "#22c55e",
+      borderColor: "#22c55e",
+    },
+    filterText: {
+      color: "#fff",
+      fontSize: 13,
+      fontWeight: "800",
+    },
+  
+    metricsRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 18,
+    },
+    metricText: {
+      color: "#94a3b8",
+      fontSize: 13,
+      fontWeight: "700",
+    },
+  
+    mainLayout: {
+      flexDirection: "row",
+      gap: 28,
+      flex: 1,
+    },
+    leftPanel: {
+      flex: 0.9,
+      maxWidth: 620,
+    },
+    rightPanel: {
+      flex: 1.1,
+      minWidth: 520,
+    },
+  
+    title: {
+      color: "#fff",
+      fontSize: 36,
+      fontWeight: "900",
+      textAlign: "center",
+      marginBottom: 26,
+    },
+    sectionTitle: {
+      color: "#94a3b8",
+      fontSize: 14,
+      fontWeight: "800",
+      marginBottom: 12,
+    },
+    inboxContainer: {
+      gap: 14,
+      flex: 1,
+      paddingRight: 14,
+    },
+  
+    notificationCard: {
+      backgroundColor: "#111827",
+      borderRadius: 18,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: "#1f2937",
+      gap: 12,
+    },
+    activeCard: {
+      borderColor: "#22c55e",
+      borderWidth: 2,
+    },
+    row: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    sender: {
+      color: "#fff",
+      fontSize: 17,
+      fontWeight: "900",
+      flex: 1,
+      paddingRight: 12,
+    },
+    content: {
+      color: "#cbd5e1",
+      fontSize: 15,
+      lineHeight: 22,
+    },
+  
+    badge: {
+      backgroundColor: "#334155",
+      paddingHorizontal: 12,
+      paddingVertical: 5,
+      borderRadius: 999,
+    },
+    badgeUrgent: {
+      backgroundColor: "#ef4444",
+    },
+    badgeWaiting: {
+      backgroundColor: "#fbbf24",
+    },
+    badgeResponded: {
+      backgroundColor: "#22c55e",
+    },
+    badgeFailed: {
+      backgroundColor: "#450a0a",
+      borderWidth: 1,
+      borderColor: "#ef4444",
+    },
+   badgeText: {
     color: "#fff",
     fontSize: 12,
     fontWeight: "900",
@@ -1115,15 +1069,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  disabledButton: {
-    opacity: 0.55,
-  },
-  errorText: {
-    color: "#FCA5A5",
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
+   
   devButton: {
     backgroundColor: "#FFB300", // Yellow color for visibility
     paddingVertical: 10,
@@ -1131,7 +1077,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 20,
   },
-  messageTime: {
+    messageTime: {
     color: "#94A3B8",
     fontSize: 10,
     fontWeight: "700",
@@ -1143,7 +1089,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  
+
   unreadDot: {
     width: 8,
     height: 8,
@@ -1158,7 +1104,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
   },
-  
+
   activeDraftLabel: {
     color: "#93C5FD",
     fontSize: 10,
@@ -1166,7 +1112,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     letterSpacing: 1,
   },
-  
+
   activeDraftText: {
     color: "#EFF6FF",
     fontSize: 14,
@@ -1182,7 +1128,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginVertical: 10,
   },
-  
+
   operatorEventText: {
     color: "#64748B",
     fontSize: 11,
@@ -1199,14 +1145,14 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     alignItems: "center",
   },
-  
+
   emptyStateTitle: {
     color: "#E2E8F0",
     fontSize: 16,
     fontWeight: "700",
     marginBottom: 8,
   },
-  
+
   emptyStateText: {
     color: "#64748B",
     fontSize: 13,
@@ -1220,14 +1166,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 32,
   },
-  
+
   emptyConversationTitle: {
     color: "#E2E8F0",
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 10,
   },
-  
+
   emptyConversationText: {
     color: "#64748B",
     fontSize: 14,
@@ -1242,14 +1188,14 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
   },
-  
+
   demoStripTitle: {
     color: "#F8FAFC",
     fontSize: 16,
     fontWeight: "800",
     marginBottom: 6,
   },
-  
+
   demoStripText: {
     color: "#94A3B8",
     fontSize: 13,
@@ -1273,6 +1219,22 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: 4,
   },
+  mutedButton: {
+    opacity: 0.55,
+  },
+  errorText: {
+    color: "#F87171",
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  disabledButton: {
+    opacity: 0.45,
+  },
 });
+
+      
+
+  
  
 
