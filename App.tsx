@@ -1,5 +1,13 @@
 import React from "react";
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View, TextInput, ScrollView } from "react-native";
+import {
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  TextInput,
+  ScrollView,
+} from "react-native";
 
 const BACKEND_URL =
   process.env.EXPO_PUBLIC_BACKEND_URL || "https://searlio.com";
@@ -80,9 +88,7 @@ const formatMessageTime = (value) => {
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleTimeString([], {
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString([], {
     hour: "numeric",
     minute: "2-digit",
   });
@@ -109,7 +115,6 @@ export default function App() {
   const [draft, setDraft] = React.useState("");
   const [filter, setFilter] = React.useState("All");
   const [backendOnline, setBackendOnline] = React.useState(false);
-  const [sendError, setSendError] = React.useState("");
   const scrollRef = React.useRef(null);
 
   const clearDraft = () => {
@@ -117,7 +122,6 @@ export default function App() {
   
     setConversations((prev) => {
       const existing = prev[selectedConversation.id];
-  
       if (!existing) return prev;
   
       return {
@@ -200,9 +204,13 @@ export default function App() {
       });
   };
 
+   // ======================
+  // ACTIONS
+  // ======================
+
   const handleGenerateAI = async () => {
     if (!selectedConversation?.id) return;
-  
+
     try {
       const res = await fetch(
         `${BACKEND_URL}/api/llm/generate-reply/${selectedConversation.id}`,
@@ -210,30 +218,30 @@ export default function App() {
           method: "POST",
         }
       );
-  
+
       if (!res.ok) {
         throw new Error(`Generate failed: ${res.status}`);
       }
-  
+
       const data = await res.json();
-  
+
       const aiText =
         data.content ||
         data.reply ||
         data.generated_reply ||
         data.text ||
         "Unable to generate reply.";
-  
+
       setDraft(aiText);
-  
+
       setConversations((prev) => {
         const existingMessages =
           prev[selectedConversation.id].messages;
-  
+
         const hasDraft = existingMessages.some(
           (msg) => msg.status === "draft"
         );
-  
+
         const updatedMessages = hasDraft
           ? existingMessages.map((msg) =>
               msg.status === "draft"
@@ -253,7 +261,7 @@ export default function App() {
                 status: "draft",
               },
             ];
-  
+
         return {
           ...prev,
           [selectedConversation.id]: {
@@ -269,16 +277,16 @@ export default function App() {
 
   const handleSend = async () => {
     if (!selectedConversation?.id) return;
-  
+
     const textToSend =
       draft.trim() ||
       selectedConversation.messages.find(
         (msg) => msg.status === "draft"
       )?.text ||
       "";
-  
+
     if (!textToSend.trim()) return;
-  
+
     try {
       const createRes = await fetch(
         `${BACKEND_URL}/api/notifications/${selectedConversation.id}/reply`,
@@ -292,15 +300,13 @@ export default function App() {
           }),
         }
       );
-  
+
       if (!createRes.ok) {
-        throw new Error(
-          `Reply create failed: ${createRes.status}`
-        );
+        throw new Error(`Reply create failed: ${createRes.status}`);
       }
-  
+
       const createdReply = await createRes.json();
-  
+
       if (createdReply?.id) {
         await fetch(
           `${BACKEND_URL}/api/replies/${createdReply.id}/delivered`,
@@ -309,7 +315,7 @@ export default function App() {
           }
         );
       }
-  
+
       setConversations((prev) => {
         const updatedMessages =
           prev[selectedConversation.id].messages.map(
@@ -322,7 +328,7 @@ export default function App() {
                   }
                 : msg
           );
-  
+
         return {
           ...prev,
           [selectedConversation.id]: {
@@ -331,14 +337,17 @@ export default function App() {
           },
         };
       });
-  
+
       setDraft("");
     } catch (err) {
       console.log("Send failed:", err);
     }
   };
 
-  // Metrics Calculation
+  // ======================
+  // METRICS CALCULATION
+  // ======================
+
   const getMetrics = () => {
     const totalPending = Object.values(conversations).filter(c => getConversationStatus(c.messages) === "waiting").length;
     const totalSent = Object.values(conversations).filter(c => getConversationStatus(c.messages) === "responded").length;
@@ -349,6 +358,10 @@ export default function App() {
 
   const { totalPending, totalSent, totalFailed } = getMetrics();
 
+  // ======================
+  // EFFECTS
+  // ======================
+
   React.useEffect(() => {
     const initialHydration = async () => {
       try {
@@ -358,7 +371,7 @@ export default function App() {
         setBackendOnline(false);
       }
     };
-  
+
     initialHydration();
   }, []);
 
@@ -370,40 +383,44 @@ export default function App() {
         console.log("Polling failed:", err);
       }
     }, 10000);
-  
+
     return () => clearInterval(interval);
   }, [conversations]);
 
   React.useEffect(() => {
     if (!selectedConversation) return;
-  
+
     const existingDraft =
       selectedConversation.messages.find(
         (msg) => msg.status === "draft"
       );
-  
+
     setDraft(existingDraft?.text || "");
   }, [selectedId, conversations]);
 
   React.useEffect(() => {
     const ids = Object.keys(conversations);
-  
+
     if (ids.length === 0) return;
-  
+
     if (!conversations[selectedId]) {
       setSelectedId(ids[0]);
     }
   }, [conversations, selectedId]);
-  
+
+  // ======================
+  // HYDRATION
+  // ======================
+
   const hydrateNotifications = async () => {
     const res = await fetch(`${BACKEND_URL}/api/notifications`);
-  
+
     if (!res.ok) {
       throw new Error(`Backend returned ${res.status}`);
     }
-  
+
     const data = await res.json();
-  
+
     const hydratedArray = data
       .sort(
         (a, b) =>
@@ -417,12 +434,12 @@ export default function App() {
           item.app_package !== "org.telegram.messenger"
       )
       .map(normalizeBackendNotification);
-  
+
     if (hydratedArray.length > 0) {
       const hydratedObject = hydratedArray.reduce(
         (acc, conversation) => {
           const existing = conversations[conversation.id];
-  
+
           acc[conversation.id] = existing
             ? {
                 ...conversation,
@@ -433,55 +450,62 @@ export default function App() {
                     : conversation.messages,
               }
             : conversation;
-  
+
           return acc;
         },
         {}
       );
-  
+
       setConversations(hydratedObject);
-  
+
       setSelectedId((prev) =>
         hydratedObject[prev]
           ? prev
           : hydratedArray[0].id
       );
-  
+
       setBackendOnline(true);
     }
   };
-  
- const refreshFromBackend = async () => {
+
+  const refreshFromBackend = async () => {
    try {
      await hydrateNotifications();
    } catch (err) {
+      
+
+
      console.log("Manual refresh failed:", err);
      setBackendOnline(false);
    }
  };
- 
- const simulateNotification = async () => {
-   try {
-     const res = await fetch(
-       `${BACKEND_URL}/api/simulate/notification?category=text`,
-       {
-         method: "POST",
-         headers: {
-           "Content-Type": "application/json",
-         },
-         body: JSON.stringify({}),
-       }
-     );
- 
-     if (!res.ok) {
-       throw new Error(`Simulation failed: ${res.status}`);
-     }
- 
-     await refreshFromBackend();
-   } catch (err) {
-     console.log("Error simulating notification:", err);
-   }
- };
+
+    // ======================
+  // SIMULATION
+  // ======================
+
+  const simulateNotification = async () => {
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/simulate/notification?category=text`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(`Simulation failed: ${res.status}`);
+      }
+
+      await refreshFromBackend();
+    } catch (err) {
+      console.log("Error simulating notification:", err);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.page}>
@@ -499,7 +523,7 @@ export default function App() {
                 : status === "Failed"
                 ? totalFailed
                 : 0;
-          
+
             return (
               <TouchableOpacity
                 key={status}
@@ -520,6 +544,17 @@ export default function App() {
           <Text style={styles.metricText}>Sent: {totalSent}</Text>
           <Text style={styles.metricText}>Failed: {totalFailed}</Text>
         </View>
+        <View style={styles.demoStrip}>
+          <View>
+            <Text style={styles.demoStripTitle}>
+              Live lead response workspace
+            </Text>
+
+            <Text style={styles.demoStripText}>
+              Simulate a new lead, generate an AI draft, edit it, and send from one console.
+            </Text>
+          </View>
+        </View>
 
         {/* Developer Only Button */}
         <TouchableOpacity style={styles.devButton} onPress={simulateNotification}>
@@ -529,6 +564,7 @@ export default function App() {
         {/* Main Content Layout */}
         <View style={styles.mainLayout}>
           {/* LEFT Panel */}
+                    {/* LEFT Panel */}
           <View style={styles.leftPanel}>
             <View style={styles.headerRow}>
               <View>
@@ -538,6 +574,9 @@ export default function App() {
               
                 <Text style={styles.subtitle}>
                   AI-assisted lead response console
+                </Text>
+                <Text style={styles.liveQueueText}>
+                  {filterConversations().length} active conversations
                 </Text>
               
                 <Text style={styles.backendBadge}>
@@ -569,71 +608,69 @@ export default function App() {
                 </View>
               ) : (
                 filterConversations().map((conversation) => {
-                const conversationStatus = getConversationStatus(conversation.messages);
-                return (
-                  <TouchableOpacity
-                    key={conversation.id}
-                    style={[
-                      styles.notificationCard,
-                      conversation.id === selectedId && styles.activeCard,
-                    ]}
-                    onPress={() => setSelectedId(conversation.id)} 
-                  >
-                    <View style={styles.row}>
-                      <View style={styles.senderRow}>
-                        <Text style={styles.sender}>
-                          {conversation.sender}
-                        </Text>
+                  const conversationStatus = getConversationStatus(conversation.messages);
+                  return (
+                    <TouchableOpacity
+                      key={conversation.id}
+                      style={[
+                        styles.notificationCard,
+                        conversation.id === selectedId && styles.activeCard,
+                      ]}
+                      onPress={() => setSelectedId(conversation.id)} 
+                    >
+                      <View style={styles.row}>
+                        <View style={styles.senderRow}>
+                          <Text style={styles.sender}>
+                            {conversation.sender}
+                          </Text>
                       
-                        {hasUnreadInbound(conversation.messages) && (
-                          <View style={styles.unreadDot} />
+                          {hasUnreadInbound(conversation.messages) && (
+                            <View style={styles.unreadDot} />
+                          )}
+                        </View>
+                        <View style={[
+                          styles.badge,
+                          conversationStatus === "urgent" && styles.badgeUrgent,
+                          conversationStatus === "waiting" && styles.badgeWaiting,
+                          conversationStatus === "responded" && styles.badgeResponded,
+                          conversationStatus === "failed" && styles.badgeFailed
+                        ]}>
+                          <Text style={styles.badgeText}>
+                            {conversationStatus.toUpperCase()}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.content}>
+                        {
+                          [...conversation.messages]
+                            .filter((m) => m.status !== "draft")
+                            .sort(
+                              (a, b) =>
+                                new Date(b.createdAt || 0).getTime() -
+                                new Date(a.createdAt || 0).getTime()
+                            )[0]?.text || "No messages yet"
+                        }
+                      </Text>
+                      <Text style={styles.cardTime}>
+                        {formatMessageTime(
+                          [...conversation.messages]
+                            .sort(
+                              (a, b) =>
+                                new Date(b.createdAt || 0).getTime() -
+                                new Date(a.createdAt || 0).getTime()
+                            )[0]?.createdAt
                         )}
-                      </View>
-                      <View style={[
-                        styles.badge,
-                        conversationStatus === "urgent" && styles.badgeUrgent,
-                        conversationStatus === "waiting" && styles.badgeWaiting,
-                        conversationStatus === "responded" && styles.badgeResponded,
-                        conversationStatus === "failed" && styles.badgeFailed
-                      ]}>
-                        <Text style={styles.badgeText}>
-                          {conversationStatus.toUpperCase()}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={styles.content}>
-                      {
-                        [...conversation.messages]
-                          .filter((m) => m.status !== "draft")
-                          .sort(
-                            (a, b) =>
-                              new Date(b.createdAt || 0).getTime() -
-                              new Date(a.createdAt || 0).getTime()
-                          )[0]?.text || "No messages yet"
-                      }
-                    </Text>
-                    <Text style={styles.cardTime}>
-                      {formatMessageTime(
-                        [...conversation.messages]
-                          .sort(
-                            (a, b) =>
-                              new Date(b.createdAt || 0).getTime() -
-                              new Date(a.createdAt || 0).getTime()
-                          )[0]?.createdAt
-                      )}
-                    </Text>
-                  </TouchableOpacity>
-                )                
-              })
-            )}
+                      </Text>
+                    </TouchableOpacity>
+                  );                
+                })
+              )}
             </View>
           </View>
-
           {/* RIGHT Panel */}
           <View style={styles.rightPanel}>
             {selectedConversation ? (
               <>
-                {/* Existing conversation UI */}
                 <View style={styles.agentCard}>
                   <Text style={styles.agentTitle}>{selectedConversation.sender}</Text>
                   <ScrollView
@@ -648,123 +685,131 @@ export default function App() {
                         // Drafts always last
                         if (a.status === "draft") return 1;
                         if (b.status === "draft") return -1;
-                        
+
                         // Sent assistant messages near bottom
                         if (a.status === "sent" && b.role !== "assistant") return 1;
                         if (b.status === "sent" && a.role !== "assistant") return -1;
-                        
+
                         return new Date(a.createdAt || 0).getTime() -
-                               new Date(b.createdAt || 0).getTime();
+                          new Date(b.createdAt || 0).getTime();
                       })
-                      .map((message) => {
-                        if (message.status === "draft") {
-                          return null;
-                        }
-                        
-                        if (isOperatorEvent(message)) {
-                          return (
-                            <View
-                              key={message.id}
-                              style={styles.operatorEvent}
-                            >
-                              <Text style={styles.operatorEventText}>
-                                Reply sent •{" "}
-                                {formatMessageTime(message.createdAt)}
-                              </Text>
-                            </View>
-                          );
-                        }
-                        
+                                          .map((message) => {
+                      if (message.status === "draft") {
+                        return null;
+                      }
+
+                      if (isOperatorEvent(message)) {
                         return (
-                          <View key={message.id}>
-                            <View
-                              style={[
-                                styles.messageBubble,
-                                message.role === "assistant"
-                                  ? message.status === "sent"
-                                    ? styles.assistantBubbleSent
-                                    : styles.assistantBubbleDraft
-                                  : styles.incomingBubble,
-                              ]}
-                            >
-                              <Text style={styles.messageText}>
-                                {message.text}
-                              </Text>
-                              {message.createdAt ? (
-                                <Text style={styles.messageTime}>
-                                  {formatMessageTime(message.createdAt)}
-                                </Text>
-                              ) : null}
-                              {message.role === "assistant" && message.status && (
-                                <Text style={styles.statusText}>
-                                  {message.status.toUpperCase()}
-                                </Text>
-                              )}
-                            </View>
+                          <View
+                            key={message.id}
+                            style={styles.operatorEvent}
+                          >
+                            <Text style={styles.operatorEventText}>
+                              Reply sent •{" "}
+                              {formatMessageTime(message.createdAt)}
+                            </Text>
                           </View>
                         );
-                      })}
-                  </ScrollView>
-          
-                  {/* Composer Area */}
-                  <View style={styles.composer}>
-                    {draft.trim() ? (
-                      <View style={styles.activeDraftPreview}>
-                        <Text style={styles.activeDraftLabel}>
-                          ACTIVE DRAFT
-                        </Text>
-                        <Text style={styles.activeDraftText}>
-                          {draft}
-                        </Text>
-                      </View>
-                    ) : null}
-                    <View style={styles.inputRow}>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Edit active draft..."
-                        value={draft}
-                        onChangeText={(text) => {
-                          setDraft(text);
-                        
-                          setConversations((prev) => {
-                            const updatedMessages =
-                              prev[selectedConversation.id].messages.map(
-                                (msg) =>
-                                  msg.status === "draft"
-                                    ? {
-                                        ...msg,
-                                        text,
-                                      }
-                                    : msg
-                              );
-                        
-                            return {
-                              ...prev,
-                              [selectedConversation.id]: {
-                                ...prev[selectedConversation.id],
-                                messages: updatedMessages,
-                              },
-                            };
-                          });
-                        }}
-                      />
+                      }
+
+                      return (
+                        <View key={message.id}>
+                          <View
+                            style={[
+                              styles.messageBubble,
+                              message.role === "assistant"
+                                ? message.status === "sent"
+                                  ? styles.assistantBubbleSent
+                                  : styles.assistantBubbleDraft
+                                : styles.incomingBubble,
+                            ]}
+                          >
+                            <Text style={styles.messageText}>
+                              {message.text}
+                            </Text>
+                            {message.createdAt ? (
+                              <Text style={styles.messageTime}>
+                                {formatMessageTime(message.createdAt)}
+                              </Text>
+                            ) : null}
+                            {message.role === "assistant" && message.status && (
+                              <Text style={styles.statusText}>
+                                {message.status.toUpperCase()}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })}
+                </ScrollView>
+
+                {/* Composer Area */}
+                <View style={styles.composer}>
+                  {draft.trim() ? (
+                    <View style={styles.activeDraftPreview}>
+                      <Text style={styles.activeDraftLabel}>
+                        ACTIVE DRAFT
+                      </Text>
+                      <Text style={styles.activeDraftText}>
+                        {draft}
+                      </Text>
+                      <Text style={styles.draftHelper}>
+                        AI-generated draft • editable before send
+                      </Text>
                     </View>
-                    <View style={styles.actionRow}>
-                      <TouchableOpacity style={styles.aiButton} onPress={handleGenerateAI}>
-                        <Text style={styles.buttonText}>Generate AI</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.clearButton}
-                        onPress={clearDraft}
-                      >
-                        <Text style={styles.buttonText}>Clear</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-                        <Text style={styles.buttonText}>Send</Text>
-                      </TouchableOpacity>
-                    </View>
+                  ) : null}
+                  <View style={styles.inputRow}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Edit active draft..."
+                      value={draft}
+                      onChangeText={(text) => {
+                        setDraft(text);
+                        
+                        setConversations((prev) => {
+                          const updatedMessages =
+                            prev[selectedConversation.id].messages.map(
+                              (msg) =>
+                                msg.status === "draft"
+                                  ? {
+                                      ...msg,
+                                      text,
+                                    }
+                                  : msg
+                            );
+
+                          return {
+                            ...prev,
+                            [selectedConversation.id]: {
+                              ...prev[selectedConversation.id],
+                              messages: updatedMessages,
+                            },
+                          };
+                        });
+                      }}
+                    />
+                  </View>
+                  <View style={styles.actionRow}>
+                    <TouchableOpacity
+                      style={styles.aiButton}
+                      onPress={handleGenerateAI}
+                    >
+                      <Text style={styles.buttonText}>
+                        Generate AI Reply
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.clearButton}
+                      onPress={clearDraft}
+                    >
+                      <Text style={styles.buttonText}>Clear</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+                      <Text style={styles.buttonText}>Send</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
+              </View>
               </>
             ) : (
               <View style={styles.emptyConversation}>
@@ -777,11 +822,12 @@ export default function App() {
               </View>
             )}
           </View>
-                           </View>
-                         </View>
-                       </SafeAreaView>
-                     );
-                   }         
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+                     
 
 const styles = StyleSheet.create({
   page: {
@@ -1169,6 +1215,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     lineHeight: 22,
+  },
+  demoStrip: {
+    backgroundColor: "#0F172A",
+    borderWidth: 1,
+    borderColor: "#1E293B",
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 16,
+  },
+  
+  demoStripTitle: {
+    color: "#F8FAFC",
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 6,
+  },
+  
+  demoStripText: {
+    color: "#94A3B8",
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  draftHelper: {
+    color: "#93C5FD",
+    fontSize: 11,
+    marginTop: 10,
+    opacity: 0.8,
+  },
+  liveQueueText: {
+    color: "#22C55E",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 6,
   },
 });
  
