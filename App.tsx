@@ -780,6 +780,9 @@ export default function App() {
                       
                         conversation.status === "new" &&
                           styles.newCard,
+
+                        hasUnreadInbound(conversation.messages) &&
+                          styles.unreadCard,
                       
                         conversation.status === "waiting" &&
                           styles.waitingCard,
@@ -790,26 +793,7 @@ export default function App() {
                         selectedId === conversation.id &&
                           styles.activeCard,
                       ]}
-                      onPress={() => {
-                         setSelectedId(conversation.id);
-                       
-                         setConversations((prev) => {
-                           const current = prev[conversation.id];
-                           if (!current) return prev;
-                       
-                           return {
-                             ...prev,
-                             [conversation.id]: {
-                               ...current,
-                               messages: current.messages.map((msg) =>
-                                 msg.role !== "assistant"
-                                   ? { ...msg, status: "read" }
-                                   : msg
-                               ),
-                             },
-                           };
-                         });
-                       }} 
+                      onPress={() => setSelectedId(conversation.id)} 
                     >
                       <View style={styles.cardTopRow}>
                         <View style={styles.cardTitleBlock}>
@@ -1568,6 +1552,14 @@ const styles = StyleSheet.create({
   unreadContent: {
     color: "#F8FAFC",
     fontWeight: "800",
+  },
+
+  unreadCard: {
+    borderColor: "#60A5FA",
+    borderWidth: 2,
+    shadowColor: "#60A5FA",
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
   },
 });
  
