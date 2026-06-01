@@ -450,7 +450,10 @@ export default function App() {
 
   const hydrateNotifications = async () => {
       const res = await fetch(`${BACKEND_URL}/api/notifications`);
-  
+      const repliesRes = await fetch(`${BACKEND_URL}/api/replies`);
+      const repliesData = await repliesRes.json();
+      
+
       if (!res.ok) {
         throw new Error(`Backend returned ${res.status}`);
       }
@@ -475,21 +478,31 @@ export default function App() {
         const hydratedObject = hydratedArray.reduce(
           (acc, conversation) => {
             const existing = conversations[conversation.id];
-  
+            console.log("HYDRATE CONVO:", conversation.id);
             acc[conversation.id] = existing
               ? {
                   ...conversation,
                   messages: [
                     ...conversation.messages,
-                    ...existing.messages.filter(
-                      (existingMsg) =>
-                        existingMsg.status === "draft" ||
-                        existingMsg.status === "sent"
+                  
+                    ...repliesData
+                      .filter((r) => r.notification_id === conversation.id)
+                      
+                      .map((r) => ({
+                        id: `reply-${r.id}`,
+                        role: "assistant",
+                        text: r.content,
+                        status: "sent",
+                        createdAt:
+                          r.delivered_at ||
+                          r.created_at ||
+                          new Date().toISOString(),
+                      })),
+                  
+                    ...(existing?.messages || []).filter(
+                      (m) => m.status === "draft"
                     ),
-                  ].filter(
-                    (msg, index, self) =>
-                      index === self.findIndex((m) => m.id === msg.id)
-                  ),
+                  ],
                 }
               : conversation;
   
