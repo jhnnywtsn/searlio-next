@@ -127,7 +127,7 @@ const hasUnreadInbound = (messages) => {
   return messages.some(
     (msg) =>
       msg.role !== "assistant" &&
-      msg.status === "inbound"
+      msg.status !== "read"
   );
 };
 
@@ -198,7 +198,8 @@ export default function App() {
   const [draft, setDraft] = React.useState("");
   const [filter, setFilter] = React.useState("All");
   const [backendOnline, setBackendOnline] = React.useState(false);
-  const scrollRef = React.useRef(null);
+  
+  const scrollRef = React.useRef<ScrollView>(null);
   
   // ==============================
   // CONVERSATION STATE
@@ -789,7 +790,26 @@ export default function App() {
                         selectedId === conversation.id &&
                           styles.activeCard,
                       ]}
-                      onPress={() => setSelectedId(conversation.id)} 
+                      onPress={() => {
+                         setSelectedId(conversation.id);
+                       
+                         setConversations((prev) => {
+                           const current = prev[conversation.id];
+                           if (!current) return prev;
+                       
+                           return {
+                             ...prev,
+                             [conversation.id]: {
+                               ...current,
+                               messages: current.messages.map((msg) =>
+                                 msg.role !== "assistant"
+                                   ? { ...msg, status: "read" }
+                                   : msg
+                               ),
+                             },
+                           };
+                         });
+                       }} 
                     >
                       <View style={styles.cardTopRow}>
                         <View style={styles.cardTitleBlock}>
