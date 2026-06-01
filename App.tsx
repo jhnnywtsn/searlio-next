@@ -141,15 +141,45 @@ const isOperatorEvent = (message) => {
 
 const getAppLabel = (sourceApp = "") => {
   const app = sourceApp.toLowerCase();
-  if (app.includes("gmail")) return "Gmail";
   if (app.includes("googlevoice")) return "Google Voice";
-  if (app.includes("textfree") || app.includes("pinger")) return "TextFree";
-  if (app.includes("signal") || app.includes("securesms")) return "Signal";
+  
+  if (
+    app.includes("textfree") ||
+    app.includes("pinger.textfree")
+  )
+    return "TextFree";
+  
+  if (
+    app.includes("textnow") ||
+    app.includes("enflick")
+  )
+    return "TextNow";
+  
+  if (app.includes("signal")) return "Signal";
   if (app.includes("telegram")) return "Telegram";
   if (app.includes("whatsapp")) return "WhatsApp";
-  if (app.includes("paypal")) return "PayPal";
-  return sourceApp || "Unknown";
+  if (app.includes("facebook.orca")) return "Messenger";
+  if (app.includes("android.apps.messaging")) return "Messages";
+  if (app.includes("google.android.gm")) return "Gmail";
 };
+
+
+
+const getChannelIcon = (app: string = "") => {
+  const value = app.toLowerCase();
+
+  if (value.includes("signal")) return "🟦";
+  if (value.includes("telegram")) return "✈️";
+  if (value.includes("whatsapp")) return "🟢";
+  if (value.includes("googlevoice")) return "📞";
+  if (value.includes("gmail")) return "📧";
+  if (value.includes("textnow")) return "💬";
+  if (value.includes("textfree")) return "💬";
+  if (value.includes("messenger")) return "💙";
+
+  return "📱";
+};
+
 
 const formatSenderLabel = (sender = "") => {
   const digits = sender.replace(/\D/g, "");
@@ -761,49 +791,62 @@ export default function App() {
                       ]}
                       onPress={() => setSelectedId(conversation.id)} 
                     >
-                      <View style={styles.row}>
-                        <View style={styles.senderRow}>
+                      <View style={styles.cardTopRow}>
+                        <View style={styles.cardTitleBlock}>
                           <Text style={styles.sender}>
                             {formatSenderLabel(conversation.sender)}
                           </Text>
                       
-                          {hasUnreadInbound(conversation.messages) && (
-                            <View style={styles.unreadDot} />
-                          )}
-                        </View>
-                        {/* Added sourceApp text here */}
+                          <View style={styles.metaRow}>
                             <Text
                               style={[
                                 styles.sourceAppText,
-                            
-                                getAppLabel(conversation.sourceApp) === "Signal" &&
-                                  styles.signalText,
-                            
-                                getAppLabel(conversation.sourceApp) === "Gmail" &&
-                                  styles.gmailText,
-                            
-                                getAppLabel(conversation.sourceApp) === "Google Voice" &&
-                                  styles.voiceText,
-                            
-                                getAppLabel(conversation.sourceApp) === "TextFree" &&
-                                  styles.textfreeText,
+                                getAppLabel(conversation.sourceApp) === "Signal" && styles.signalText,
+                                getAppLabel(conversation.sourceApp) === "Gmail" && styles.gmailText,
+                                getAppLabel(conversation.sourceApp) === "Google Voice" && styles.voiceText,
+                                getAppLabel(conversation.sourceApp) === "TextFree" && styles.textfreeText,
                               ]}
                             >
                               {getAppLabel(conversation.sourceApp)}
                             </Text>
-                        <View style={[
-                          styles.badge,
-                          conversationStatus === "urgent" && styles.badgeUrgent,
-                          conversationStatus === "waiting" && styles.badgeWaiting,
-                          conversationStatus === "responded" && styles.badgeResponded,
-                          conversationStatus === "failed" && styles.badgeFailed
-                        ]}>
+                      
+                            <Text style={styles.metaDivider}>•</Text>
+                      
+                            <Text style={styles.cardTime}>
+                              {formatMessageTime(
+                                [...conversation.messages]
+                                  .sort(
+                                    (a, b) =>
+                                      new Date(b.createdAt || 0).getTime() -
+                                      new Date(a.createdAt || 0).getTime()
+                                  )[0]?.createdAt
+                              )}
+                            </Text>
+                          </View>
+                        </View>
+                      
+                        <View
+                          style={[
+                            styles.badge,
+                            conversationStatus === "urgent" && styles.badgeUrgent,
+                            conversationStatus === "waiting" && styles.badgeWaiting,
+                            conversationStatus === "responded" && styles.badgeResponded,
+                            conversationStatus === "failed" && styles.badgeFailed,
+                          ]}
+                        >
                           <Text style={styles.badgeText}>
                             {conversationStatus.toUpperCase()}
                           </Text>
                         </View>
                       </View>
-                      <Text style={styles.content}>
+                      
+                      <Text
+                        style={[
+                          styles.content,
+                          hasUnreadInbound(conversation.messages) && styles.unreadContent,
+                        ]}
+                        numberOfLines={2}
+                      >
                         {
                           [...conversation.messages]
                             .filter((m) => m.status !== "draft")
@@ -813,16 +856,6 @@ export default function App() {
                                 new Date(a.createdAt || 0).getTime()
                             )[0]?.text || "No messages yet"
                         }
-                      </Text>
-                      <Text style={styles.cardTime}>
-                        {formatMessageTime(
-                          [...conversation.messages]
-                            .sort(
-                              (a, b) =>
-                                new Date(b.createdAt || 0).getTime() -
-                                new Date(a.createdAt || 0).getTime()
-                            )[0]?.createdAt
-                        )}
                       </Text>
                     </TouchableOpacity>
                   );                
@@ -1486,6 +1519,34 @@ const styles = StyleSheet.create({
   
   respondedCard: {
     borderLeftColor: "#3B82F6",
+  },
+  cardTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  
+  cardTitleBlock: {
+    flex: 1,
+  },
+  
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 6,
+  },
+  
+  metaDivider: {
+    color: "#475569",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  
+  unreadContent: {
+    color: "#F8FAFC",
+    fontWeight: "800",
   },
 });
  
