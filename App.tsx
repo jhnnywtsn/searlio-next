@@ -666,6 +666,8 @@ export default function App() {
     }
   };
 
+ 
+
   // ======================
   // SIMULATION
   // ======================
@@ -734,6 +736,12 @@ export default function App() {
           <Text style={styles.metricText}>Pending: {totalPending}</Text>
           <Text style={styles.metricText}>Sent: {totalSent}</Text>
           <Text style={styles.metricText}>Failed: {totalFailed}</Text>
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => setSettingsOpen(true)}
+          >
+            <Text style={styles.settingsButtonText}>⚙️</Text>
+          </TouchableOpacity>
         </View>
         <View style={styles.demoStrip}>
           <View>
@@ -746,6 +754,83 @@ export default function App() {
             </Text>
           </View>
         </View>
+
+        {settingsOpen && (
+          <View style={styles.settingsPanel}>
+            <View style={styles.settingsHeader}>
+              <Text style={styles.settingsTitle}>
+                Operator Settings
+              </Text>
+        
+              <TouchableOpacity
+                onPress={() => setSettingsOpen(false)}
+              >
+                <Text style={styles.settingsClose}>
+                  ✕
+                </Text>
+              </TouchableOpacity>
+            </View>
+        
+            <Text style={styles.settingsSection}>
+              Mode
+            </Text>
+        
+            <View style={styles.settingsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.settingsChip,
+                  settings.accountMode === "leads" &&
+                    styles.settingsChipActive,
+                ]}
+                onPress={() =>
+                  updateSetting("accountMode", "leads")
+                }
+              >
+                <Text style={styles.settingsChipText}>
+                  Leads
+                </Text>
+              </TouchableOpacity>
+        
+              <TouchableOpacity
+                style={[
+                  styles.settingsChip,
+                  settings.accountMode === "inbox" &&
+                    styles.settingsChipActive,
+                ]}
+                onPress={() =>
+                  updateSetting("accountMode", "inbox")
+                }
+              >
+                <Text style={styles.settingsChipText}>
+                  Inbox
+                </Text>
+              </TouchableOpacity>
+            </View>
+          
+          <Text style={styles.settingsSection}>
+            Tone
+          </Text>
+          
+          <View style={styles.settingsRow}>
+            {["casual", "direct", "friendly", "professional"].map((tone) => (
+              <TouchableOpacity
+                key={tone}
+                style={[
+                  styles.settingsChip,
+                  settings.toneStyle === tone &&
+                    styles.settingsChipActive,
+                ]}
+                onPress={() => updateSetting("toneStyle", tone)}
+              >
+                <Text style={styles.settingsChipText}>
+                  {tone}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+        
+        )}
 
         {/* Developer Only Button */}
         <TouchableOpacity style={styles.devButton} onPress={simulateNotification}>
@@ -1616,6 +1701,81 @@ const styles = StyleSheet.create({
     shadowColor: "#60A5FA",
     shadowOpacity: 0.35,
     shadowRadius: 10,
+  },
+  settingsButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#1E293B",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  
+  settingsButtonText: {
+    fontSize: 18,
+  },
+  settingsPanel: {
+    position: "absolute",
+    top: 90,
+    right: 20,
+    width: 420,
+    backgroundColor: "#0F172A",
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#1E293B",
+    zIndex: 999,
+  },
+  
+  settingsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  
+  settingsTitle: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  
+  settingsClose: {
+    color: "#94A3B8",
+    fontSize: 20,
+  },
+  
+  settingsSection: {
+    color: "#94A3B8",
+    fontSize: 13,
+    marginBottom: 10,
+    textTransform: "uppercase",
+  },
+  
+  settingsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  
+  settingsChip: {
+    backgroundColor: "#111827",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#1E293B",
+  },
+  
+  settingsChipActive: {
+    borderColor: "#22C55E",
+    backgroundColor: "#052E16",
+  },
+  
+  settingsChipText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
 });
  
