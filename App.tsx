@@ -647,7 +647,33 @@ export default function App() {
                   </Text>
                 </View>
               ) : (
-                filterConversations().map((conversation) => {
+                filterConversations()
+                  .sort((a, b) => {
+                    // Keep selected conversation pinned
+                    if (a.id === selectedId) return -1;
+                    if (b.id === selectedId) return 1;
+                
+                    // Otherwise newest activity first
+                    const aLatest = [...a.messages]
+                      .sort(
+                        (x, y) =>
+                          new Date(y.createdAt || 0).getTime() -
+                          new Date(x.createdAt || 0).getTime()
+                      )[0]?.createdAt;
+                
+                    const bLatest = [...b.messages]
+                      .sort(
+                        (x, y) =>
+                          new Date(y.createdAt || 0).getTime() -
+                          new Date(x.createdAt || 0).getTime()
+                      )[0]?.createdAt;
+                
+                    return (
+                      new Date(bLatest || 0).getTime() -
+                      new Date(aLatest || 0).getTime()
+                    );
+                  })
+                  .map((conversation) => {
                   const conversationStatus = getConversationStatus(conversation.messages);
                   return (
                     <TouchableOpacity
