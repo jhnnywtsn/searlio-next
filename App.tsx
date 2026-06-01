@@ -101,11 +101,20 @@ const normalizeBackendNotification = (n: BackendNotification) => {
 const formatMessageTime = (value) => {
   if (!value) return "";
 
-  const date = new Date(value);
+  const normalizedValue =
+    typeof value === "string" &&
+    value.includes("T") &&
+    !value.endsWith("Z")
+      ? `${value}Z`
+      : value;
+
+  const date = new Date(normalizedValue);
 
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString([], {
     hour: "numeric",
     minute: "2-digit",
+    hour12: true,
+    timeZone: "America/New_York",
   });
 };
 
@@ -351,6 +360,7 @@ export default function App() {
                     ...msg,
                     text: textToSend.trim(),
                     status: "sent",
+                    createdAt: new Date().toISOString(),
                   }
                 : msg
           );
