@@ -794,6 +794,7 @@ export default function App() {
                       <View style={styles.cardTopRow}>
                         <View style={styles.cardTitleBlock}>
                           <Text style={styles.sender}>
+                            {getChannelIcon(conversation.sourceApp)}{" "}
                             {formatSenderLabel(conversation.sender)}
                           </Text>
                       
