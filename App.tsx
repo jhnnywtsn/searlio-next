@@ -1,11 +1,4 @@
 import React from "react";
-// SEARLIO EDITING RULES
-// - Keep edits small.
-// - Do not remove backend hydration.
-// - Do not duplicate draft UI.
-// - Thread shows history only.
-// - Composer owns active draft.
-// - Always check JSX closing tags.
 import {
   SafeAreaView,
   StyleSheet,
@@ -37,6 +30,10 @@ const initialConversations = {
   },
 };
 
+// ==============================
+// DATA + HYDRATION
+// ==============================
+
 // Function to calculate conversation status
 const getConversationStatus = (messages) => {
   const hasInbound = messages.some(msg => msg.status === "inbound");
@@ -66,6 +63,7 @@ type BackendNotification = {
   extra_data?: Record<string, any>;
 };
 
+// Normalize the backend notification data
 const normalizeBackendNotification = (n: BackendNotification) => {
   const title =
     n.sender ||
@@ -95,6 +93,11 @@ const normalizeBackendNotification = (n: BackendNotification) => {
   };
 };
 
+// ==============================
+// AI GENERATION
+// ==============================
+
+// Function to format message time
 const formatMessageTime = (value) => {
   if (!value) return "";
 
@@ -106,6 +109,11 @@ const formatMessageTime = (value) => {
   });
 };
 
+// ==============================
+// SEND FLOW
+// ==============================
+
+// Function to check if there are unread inbound messages
 const hasUnreadInbound = (messages) => {
   return messages.some(
     (msg) =>
@@ -114,6 +122,7 @@ const hasUnreadInbound = (messages) => {
   );
 };
 
+// Function to check if a message is an operator event
 const isOperatorEvent = (message) => {
   return (
     message.role === "assistant" &&
@@ -128,6 +137,11 @@ export default function App() {
   const [filter, setFilter] = React.useState("All");
   const [backendOnline, setBackendOnline] = React.useState(false);
   const scrollRef = React.useRef(null);
+  
+  // ==============================
+  // CONVERSATION STATE
+  // ==============================
+
 
   const clearDraft = () => {
     setDraft("");
@@ -216,7 +230,7 @@ export default function App() {
       });
   };
 
-   // ======================
+  // ======================
   // ACTIONS
   // ======================
 
@@ -491,7 +505,7 @@ export default function App() {
    }
  };
 
-    // ======================
+  // ======================
   // SIMULATION
   // ======================
 
@@ -518,6 +532,11 @@ export default function App() {
     }
   };
 
+  // ==============================
+  // LEFT PANEL
+  // ==============================
+  
+  
   return (
     <SafeAreaView style={styles.page}>
       <View style={styles.container}>
@@ -683,6 +702,10 @@ export default function App() {
             </View>
           </View>
           </ScrollView>
+
+ 
+  
+          
           {/* RIGHT Panel */}
           <View style={styles.rightPanel}>
             {selectedConversation ? (
@@ -714,19 +737,7 @@ export default function App() {
                         return null;
                       }
 
-                      if (isOperatorEvent(message)) {
-                        return (
-                          <View
-                            key={message.id}
-                            style={styles.operatorEvent}
-                          >
-                            <Text style={styles.operatorEventText}>
-                              Reply sent •{" "}
-                              {formatMessageTime(message.createdAt)}
-                            </Text>
-                          </View>
-                        );
-                      }
+                      
 
                       return (
                         <View key={message.id}>
@@ -758,6 +769,8 @@ export default function App() {
                       );
                     })}
                 </ScrollView>
+
+  
 
                 {/* Composer Area */}
                 <View style={styles.composer}>
