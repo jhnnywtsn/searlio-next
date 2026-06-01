@@ -447,15 +447,17 @@ export default function App() {
   }, [conversations]);
 
   React.useEffect(() => {
-    if (!selectedConversation) return;
-
-    const existingDraft =
-      selectedConversation.messages.find(
-        (msg) => msg.status === "draft"
-      );
-
+    if (!selectedConversation) {
+      setDraft("");
+      return;
+    }
+  
+    const existingDraft = selectedConversation.messages.find(
+      (msg) => msg.status === "draft"
+    );
+  
     setDraft(existingDraft?.text || "");
-  }, [selectedId, conversations]);
+  }, [selectedId]);
 
   React.useEffect(() => {
     const ids = Object.keys(conversations);
@@ -532,14 +534,16 @@ export default function App() {
             } else {
               acc[threadKey] = {
                 ...existingThread,
-                notificationId: conversation.id,
+                notificationId: existingThread.notificationId || conversation.id,
                 createdAt:
                   new Date(conversation.createdAt).getTime() >
                   new Date(existingThread.createdAt).getTime()
                     ? conversation.createdAt
                     : existingThread.createdAt,
                 messages: [
-                  ...existingThread.messages,
+                  ...existingThread.messages.filter(
+                    (m) => m.status === "draft" || m.status === "sent"
+                  ),
                   ...conversation.messages,
                   ...replyMessages,
                 ].filter(
