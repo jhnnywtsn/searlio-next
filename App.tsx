@@ -479,11 +479,17 @@ export default function App() {
             acc[conversation.id] = existing
               ? {
                   ...conversation,
-                  messages:
-                    existing.messages.length >
-                    conversation.messages.length
-                      ? existing.messages
-                      : conversation.messages,
+                  messages: [
+                    ...conversation.messages,
+                    ...existing.messages.filter(
+                      (existingMsg) =>
+                        existingMsg.status === "draft" ||
+                        existingMsg.status === "sent"
+                    ),
+                  ].filter(
+                    (msg, index, self) =>
+                      index === self.findIndex((m) => m.id === msg.id)
+                  ),
                 }
               : conversation;
   
