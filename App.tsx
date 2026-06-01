@@ -271,7 +271,7 @@ export default function App() {
 
     try {
       const res = await fetch(
-        `${BACKEND_URL}/api/llm/generate-reply/${selectedConversation.id}`,
+        `${BACKEND_URL}/api/llm/generate-reply/${selectedConversation.notificationId || selectedConversation.id}`,
         {
           method: "POST",
         }
@@ -347,7 +347,7 @@ export default function App() {
 
     try {
       const createRes = await fetch(
-        `${BACKEND_URL}/api/notifications/${selectedConversation.id}/reply`,
+        `${BACKEND_URL}/api/notifications/${selectedConversation.notificationId || selectedConversation.id}/reply`,
         {
           method: "POST",
           headers: {
@@ -501,33 +501,53 @@ export default function App() {
         const hydratedObject = hydratedArray.reduce(
           (acc, conversation) => {
             const existing = conversations[conversation.id];
-            console.log("HYDRATE CONVO:", conversation.id);
-            acc[conversation.id] = existing
-              ? {
-                  ...conversation,
-                  messages: [
-                    ...conversation.messages,
+            
+            const threadKey = `${conversation.sourceApp}-${conversation.sender}`;
+            const existingThread = acc[threadKey];
+            
+            const replyMessages = repliesData
+              .filter((r) => r.notification_id === conversation.id)
+              .map((r) => ({
+                id: `reply-${r.id}`,
+                role: "assistant",
+                text: r.content,
+                status: "sent",
+                createdAt:
+                  r.delivered_at ||
+                  r.created_at ||
+                  new Date().toISOString(),
+              }));
+            
+            if (!existingThread) {
+              acc[threadKey] = {
+                ...conversation,
+                id: threadKey,
+                notificationId: conversation.id,
+                messages: [
+                  ...conversation.messages,
+                  ...replyMessages,
                   
-                    ...repliesData
-                      .filter((r) => r.notification_id === conversation.id)
-                      
-                      .map((r) => ({
-                        id: `reply-${r.id}`,
-                        role: "assistant",
-                        text: r.content,
-                        status: "sent",
-                        createdAt:
-                          r.delivered_at ||
-                          r.created_at ||
-                          new Date().toISOString(),
-                      })),
-                  
-                    ...(existing?.messages || []).filter(
-                      (m) => m.status === "draft"
-                    ),
-                  ],
-                }
-              : conversation;
+                ],
+              };
+            } else {
+              acc[threadKey] = {
+                ...existingThread,
+                notificationId: conversation.id,
+                createdAt:
+                  new Date(conversation.createdAt).getTime() >
+                  new Date(existingThread.createdAt).getTime()
+                    ? conversation.createdAt
+                    : existingThread.createdAt,
+                messages: [
+                  ...existingThread.messages,
+                  ...conversation.messages,
+                  ...replyMessages,
+                ].filter(
+                  (msg, index, self) =>
+                    index === self.findIndex((m) => m.id === msg.id)
+                ),
+              };
+            }
   
             return acc;
           },
