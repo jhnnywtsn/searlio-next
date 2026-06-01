@@ -294,7 +294,7 @@ export default function App() {
 
       setConversations((prev) => {
         const existingMessages =
-          prev[selectedConversation.id].messages;
+          prev[selectedId].messages
 
         const hasDraft = existingMessages.some(
           (msg) => msg.status === "draft"
@@ -322,8 +322,8 @@ export default function App() {
 
         return {
           ...prev,
-          [selectedConversation.id]: {
-            ...prev[selectedConversation.id],
+          [selectedId]: {
+            ...prev[selectedId],
             messages: updatedMessages,
           },
         };
@@ -921,30 +921,47 @@ export default function App() {
                       style={styles.input}
                       placeholder="Edit active draft..."
                       value={draft}
-                      onChangeText={(text) => {
-                        setDraft(text);
+                                            
+                        onChangeText={(text) => {
+                          setDraft(text);
                         
-                        setConversations((prev) => {
-                          const updatedMessages =
-                            prev[selectedConversation.id].messages.map(
-                              (msg) =>
-                                msg.status === "draft"
-                                  ? {
-                                      ...msg,
-                                      text,
-                                    }
-                                  : msg
+                          setConversations((prev) => {
+                            if (!selectedId || !prev[selectedId]) return prev;
+                        
+                            const existingMessages =
+                              prev[selectedId].messages || [];
+                        
+                            const hasDraft = existingMessages.some(
+                              (m) => m.status === "draft"
                             );
-
-                          return {
-                            ...prev,
-                            [selectedConversation.id]: {
-                              ...prev[selectedConversation.id],
-                              messages: updatedMessages,
-                            },
-                          };
-                        });
-                      }}
+                        
+                            const messages = hasDraft
+                              ? existingMessages.map((m) =>
+                                  m.status === "draft"
+                                    ? { ...m, text }
+                                    : m
+                                )
+                              : [
+                                  ...existingMessages,
+                                  {
+                                    id: `draft-${Date.now()}`,
+                                    role: "assistant",
+                                    text,
+                                    status: "draft",
+                                    createdAt: new Date().toISOString(),
+                                  },
+                                ];
+                        
+                            return {
+                              ...prev,
+                              [selectedId]: {
+                                ...prev[selectedId],
+                                messages,
+                              },
+                            };
+                          });
+                        }}
+                        
                     />
                   </View>
                   <View style={styles.actionRow}>
