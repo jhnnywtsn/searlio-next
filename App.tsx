@@ -66,9 +66,9 @@ type BackendNotification = {
 // Normalize the backend notification data
 const normalizeBackendNotification = (n: BackendNotification) => {
   const title =
-    n.sender ||
     n.title ||
     n.extra_data?.raw_title ||
+    n.sender ||
     "Unknown";
   const message = n.content || n.extra_data?.raw_content || "";
 
@@ -137,6 +137,29 @@ const isOperatorEvent = (message) => {
     message.role === "assistant" &&
     message.status === "sent"
   );
+};
+
+const getAppLabel = (sourceApp = "") => {
+  const app = sourceApp.toLowerCase();
+  if (app.includes("gmail")) return "Gmail";
+  if (app.includes("googlevoice")) return "Google Voice";
+  if (app.includes("textfree") || app.includes("pinger")) return "TextFree";
+  if (app.includes("signal") || app.includes("securesms")) return "Signal";
+  if (app.includes("telegram")) return "Telegram";
+  if (app.includes("whatsapp")) return "WhatsApp";
+  if (app.includes("paypal")) return "PayPal";
+  return sourceApp || "Unknown";
+};
+
+const formatSenderLabel = (sender = "") => {
+  const digits = sender.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return sender;
 };
 
 export default function App() {
@@ -699,14 +722,25 @@ export default function App() {
                       key={conversation.id}
                       style={[
                         styles.notificationCard,
-                        conversation.id === selectedId && styles.activeCard,
+                      
+                        conversation.status === "new" &&
+                          styles.newCard,
+                      
+                        conversation.status === "waiting" &&
+                          styles.waitingCard,
+                      
+                        conversation.status === "responded" &&
+                          styles.respondedCard,
+                      
+                        selectedId === conversation.id &&
+                          styles.activeCard,
                       ]}
                       onPress={() => setSelectedId(conversation.id)} 
                     >
                       <View style={styles.row}>
                         <View style={styles.senderRow}>
                           <Text style={styles.sender}>
-                            {conversation.sender}
+                            {formatSenderLabel(conversation.sender)}
                           </Text>
                       
                           {hasUnreadInbound(conversation.messages) && (
@@ -714,8 +748,24 @@ export default function App() {
                           )}
                         </View>
                         {/* Added sourceApp text here */}
-                            <Text style={styles.sourceAppText}>
-                              {conversation.sourceApp}
+                            <Text
+                              style={[
+                                styles.sourceAppText,
+                            
+                                getAppLabel(conversation.sourceApp) === "Signal" &&
+                                  styles.signalText,
+                            
+                                getAppLabel(conversation.sourceApp) === "Gmail" &&
+                                  styles.gmailText,
+                            
+                                getAppLabel(conversation.sourceApp) === "Google Voice" &&
+                                  styles.voiceText,
+                            
+                                getAppLabel(conversation.sourceApp) === "TextFree" &&
+                                  styles.textfreeText,
+                              ]}
+                            >
+                              {getAppLabel(conversation.sourceApp)}
                             </Text>
                         <View style={[
                           styles.badge,
@@ -993,33 +1043,50 @@ const styles = StyleSheet.create({
   },
 
   notificationCard: {
-    backgroundColor: "#111827",
-    borderRadius: 18,
+    backgroundColor: "#0F172A",
+    borderRadius: 20,
     padding: 18,
     borderWidth: 1,
-    borderColor: "#1f2937",
-    gap: 12,
+    borderColor: "#1E293B",
+    gap: 10,
+    marginBottom: 12,
+    borderLeftWidth: 5,
+  
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+     elevation: 3,
   },
   activeCard: {
-    borderColor: "#22c55e",
+    borderColor: "#22C55E",
     borderWidth: 2,
+    backgroundColor: "#111C2E",
   },
+  
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
   },
+  
   sender: {
-    color: "#fff",
-    fontSize: 17,
+    color: "#F8FAFC",
+    fontSize: 20,
     fontWeight: "900",
     flex: 1,
-    paddingRight: 12,
+    paddingRight: 10,
+    letterSpacing: 0.2,
   },
+  
   content: {
-    color: "#cbd5e1",
+    color: "#CBD5E1",
     fontSize: 15,
     lineHeight: 22,
+    marginTop: 2,
   },
 
   badge: {
@@ -1213,10 +1280,20 @@ const styles = StyleSheet.create({
   },
   
   unreadDot: {
-    width: 8,
-    height: 8,
+    width: 12,
+    height: 12,
     borderRadius: 999,
     backgroundColor: "#22C55E",
+    borderWidth: 2,
+    borderColor: "#052e16",
+    shadowColor: "#22C55E",
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    elevation: 6,
   },
   activeDraftPreview: {
     backgroundColor: "#172554",
@@ -1258,10 +1335,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   cardTime: {
-    color: "#64748B",
+    color: "#94A3B8",
     fontSize: 11,
-    marginTop: 6,
-    fontWeight: "600",
+    fontWeight: "700",
+    marginTop: 4,
   },
   emptyState: {
     paddingVertical: 40,
@@ -1336,10 +1413,38 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   sourceAppText: {
-    color: "#64748B",
+    color: "#38BDF8",
     fontSize: 11,
-    fontWeight: "700",
-    marginTop: 4,
+    fontWeight: "800",
+    marginTop: 6,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  signalText: {
+    color: "#22C55E",
+  },
+  
+  gmailText: {
+    color: "#60A5FA",
+  },
+  
+  voiceText: {
+    color: "#A78BFA",
+  },
+  
+  textfreeText: {
+    color: "#F59E0B",
+  },
+  newCard: {
+    borderLeftColor: "#22C55E",
+  },
+  
+  waitingCard: {
+    borderLeftColor: "#F59E0B",
+  },
+  
+  respondedCard: {
+    borderLeftColor: "#3B82F6",
   },
 });
  
