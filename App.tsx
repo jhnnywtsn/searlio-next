@@ -8,9 +8,25 @@ import {
   TextInput,
   ScrollView,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const BACKEND_URL =
   process.env.EXPO_PUBLIC_BACKEND_URL || "https://searlio.com";
+
+const STORAGE_KEY = "searlio_settings";
+
+const DEFAULT_SETTINGS = {
+  accountMode: "inbox",
+  autoSend: false,
+  highPriorityOnly: true,
+  skipSignal: false,
+  skipTelegram: false,
+  toneStyle: "casual",
+  replyLength: "short",
+  emojiUse: "minimal",
+  personalSignature: "",
+  preferredChannel: "sms",
+};
 
 const initialConversations = {
   "1": {
@@ -198,6 +214,8 @@ export default function App() {
   const [draft, setDraft] = React.useState("");
   const [filter, setFilter] = React.useState("All");
   const [backendOnline, setBackendOnline] = React.useState(false);
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [settings, setSettings] = React.useState(DEFAULT_SETTINGS);
   
   const scrollRef = React.useRef<ScrollView>(null);
   
@@ -500,6 +518,24 @@ export default function App() {
     }
   }, [conversations, selectedId]);
 
+  React.useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          setSettings({
+            ...DEFAULT_SETTINGS,
+            ...JSON.parse(saved),
+          });
+        }
+      } catch (err) {
+        console.log("Settings load failed:", err);
+      }
+    };
+  
+    loadSettings();
+  }, []);
+
   // ======================
   // HYDRATION
   // ======================
@@ -611,6 +647,24 @@ export default function App() {
      setBackendOnline(false);
    }
  };
+
+  const updateSetting = async (key, value) => {
+    const updated = {
+      ...settings,
+      [key]: value,
+    };
+  
+    setSettings(updated);
+  
+    try {
+      await AsyncStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(updated)
+      );
+    } catch (err) {
+      console.log("Settings save failed:", err);
+    }
+  };
 
   // ======================
   // SIMULATION
@@ -845,23 +899,25 @@ export default function App() {
                         </View>
                       </View>
                       
-                      <Text
-                        style={[
-                          styles.content,
-                          hasUnreadInbound(conversation.messages) && styles.unreadContent,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {
-                          [...conversation.messages]
-                            .filter((m) => m.status !== "draft")
-                            .sort(
-                              (a, b) =>
-                                new Date(b.createdAt || 0).getTime() -
-                                new Date(a.createdAt || 0).getTime()
-                            )[0]?.text || "No messages yet"
-                        }
-                      </Text>
+                      {conversationStatus !== "responded" && (
+                        <Text
+                          style={[
+                            styles.content,
+                            hasUnreadInbound(conversation.messages) && styles.unreadContent,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {
+                            [...conversation.messages]
+                              .filter((m) => m.status !== "draft")
+                              .sort(
+                                (a, b) =>
+                                  new Date(b.createdAt || 0).getTime() -
+                                  new Date(a.createdAt || 0).getTime()
+                              )[0]?.text || "No messages yet"
+                          }
+                        </Text>
+                      )}
                     </TouchableOpacity>
                   );                
                 })
