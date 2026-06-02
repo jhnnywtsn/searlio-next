@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS = {
   emojiUse: "minimal",
   personalSignature: "",
   preferredChannel: "sms",
+  reviewBeforeSend: true,
 };
 
 const initialConversations = {
@@ -265,6 +266,17 @@ export default function App() {
           conversation.messages
         );
   
+        if (settings.highPriorityOnly) {
+          const hasPriority = conversation.messages.some(
+            (m) =>
+              (m.text || "")
+                .toLowerCase()
+                .includes("urgent")
+          );
+  
+          if (!hasPriority) return false;
+        }
+  
         return (
           filter === "All" ||
           status === filter.toLowerCase()
@@ -299,24 +311,19 @@ export default function App() {
   
         const aLatest = Math.max(
           ...a.messages.map((m) =>
-            new Date(
-              m.createdAt || 0
-            ).getTime()
+            new Date(m.createdAt || 0).getTime()
           )
         );
   
         const bLatest = Math.max(
           ...b.messages.map((m) =>
-            new Date(
-              m.createdAt || 0
-            ).getTime()
+            new Date(m.createdAt || 0).getTime()
           )
         );
   
         return bLatest - aLatest;
       });
   };
-
   // ======================
   // ACTIONS
   // ======================
@@ -935,6 +942,26 @@ export default function App() {
             >
               <Text style={styles.settingsChipText}>
                 {settings.highPriorityOnly ? "enabled" : "disabled"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.settingsSection}>
+            Review Before Send
+          </Text>
+          
+          <View style={styles.settingsRow}>
+            <TouchableOpacity
+              style={[
+                styles.settingsChip,
+                settings.reviewBeforeSend &&
+                  styles.settingsChipActive,
+              ]}
+              onPress={() =>
+                updateSetting("reviewBeforeSend", !settings.reviewBeforeSend)
+              }
+            >
+              <Text style={styles.settingsChipText}>
+                {settings.reviewBeforeSend ? "enabled" : "disabled"}
               </Text>
             </TouchableOpacity>
           </View>
