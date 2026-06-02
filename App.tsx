@@ -27,23 +27,39 @@ const DEFAULT_SETTINGS = {
   personalSignature: "",
   preferredChannel: "sms",
   reviewBeforeSend: true,
+  leadPhoneNumbers: "",
 };
 
 const initialConversations = {
   "1": {
     id: "1",
     sender: "John - Website Lead",
-    messages: [
-      { id: "m1", role: "incoming", text: "Hi, I need a quote for a kitchen remodel.", status: "inbound" },
-      { id: "m2", role: "assistant", text: "Absolutely — what size kitchen are you working with?", status: "draft" },
-    ],
+    sourceApp: "website",
     status: "new",
+    messages: [
+      {
+        id: "m1",
+        role: "user",
+        text: "Hi, I need a quote for landscaping work.",
+        status: "inbound",
+        createdAt: new Date().toISOString(),
+      },
+    ],
   },
   "2": {
     id: "2",
     sender: "Sarah",
-    messages: [],
+    sourceApp: "sms",
     status: "new",
+    messages: [
+      {
+        id: "m2",
+        role: "user",
+        text: "Can you call me back later today?",
+        status: "inbound",
+        createdAt: new Date().toISOString(),
+      },
+    ],
   },
 };
 
@@ -91,10 +107,16 @@ const normalizeBackendNotification = (n: BackendNotification) => {
 
   return {
     id: n.id,
-    sender: title,
+    sender:
+      n.extra_data?.phone?.includes("+")
+        ? n.extra_data.phone
+        : title,
+    displayName: title,
     preview: message || "No message content",
     channel: n.category || "notification",
     status: n.status || "pending",
+    extraData: n.extra_data || {},
+    phone: n.extra_data?.phone || n.sender || "",
     priority: n.category === "lead" || title.toLowerCase().includes("lead") ? "high" : "normal",
     createdAt: n.created_at || new Date().toISOString(),
     messages: [
@@ -177,13 +199,18 @@ const getAppLabel = (sourceApp = "") => {
   if (app.includes("whatsapp")) return "WhatsApp";
   if (app.includes("facebook.orca")) return "Messenger";
   if (app.includes("android.apps.messaging")) return "Messages";
-  if (app.includes("gm")) return "Gmail";
+  if (app.includes("google.android.gm")) return "Gmail";
+  if (app.includes("gmail")) return "Gmail";
+  if (app.includes("com.google.android.gm")) return "Gmail";
   if (app.includes("com.snapchat.android")) return "SnapChat";
   if (app.includes("com.zangi.messenger")) return "Zangi";
   if (app.includes("com.instagram.android")) return "Instagram";
   if (app.includes("com.Slack")) return "Slack";
   if (app.includes("com.discord")) return "Discord";
   if (app.includes("com.microsoft.office.outlook")) return "Outlook";
+  if (app.includes("com.pinger.textfree")) return "TextFree";
+  if (app.includes("com.google.android.apps.googlevoice")) return "Google Voice";
+  if (app.includes("com.enflick.android.TextNow")) return "TextNow";
 };
 
 
@@ -265,6 +292,22 @@ export default function App() {
         const status = getConversationStatus(
           conversation.messages
         );
+
+        const appLabel = getAppLabel(conversation.sourceApp);
+        
+        if (
+          settings.skipSignal &&
+          appLabel === "Signal"
+        ) {
+          return false;
+        }
+        
+        if (
+          settings.skipTelegram &&
+          appLabel === "Telegram"
+        ) {
+          return false;
+        }
   
         if (settings.highPriorityOnly) {
           const hasPriority = conversation.messages.some(
@@ -354,6 +397,12 @@ export default function App() {
 
       setDraft(aiText);
 
+      if (!settings.reviewBeforeSend) {
+        setTimeout(() => {
+          handleSend();
+        }, 300);
+      }
+
       setConversations((prev) => {
         const existingMessages =
           prev[selectedId].messages
@@ -426,7 +475,44 @@ export default function App() {
       }
 
       const createdReply = await createRes.json();
+      const phone =
+        selectedConversation?.extraData?.phone ||
+        selectedConversation?.phone ||
+        selectedConversation?.sender;
 
+      const isPhone =
+        typeof phone === "string" &&
+        phone.includes("+");
+
+      console.log("SEND ROUTE CHECK:", {
+        sender: selectedConversation?.sender,
+        phone,
+        isPhone,
+        extraData: selectedConversation?.extraData,
+        selectedConversation,
+      });
+      
+      if (isPhone) {
+        const sendRes = await fetch(`${BACKEND_URL}/api/send/sms`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            to: phone,
+            body: textToSend.trim(),
+          }),
+        });
+      
+        const sendData = await sendRes.json();
+        console.log("SMS SEND RESULT:", sendData);
+        
+        if (!sendRes.ok || sendData?.ok === false) {
+          throw new Error(
+            `SMS send failed: ${sendRes.status} ${JSON.stringify(sendData)}`
+          );
+        }
+      }
       if (createdReply?.id) {
         await fetch(
           `${BACKEND_URL}/api/replies/${createdReply.id}/delivered`,
@@ -532,21 +618,18 @@ export default function App() {
   }, [conversations, selectedId]);
 
   React.useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const saved = await AsyncStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          setSettings({
-            ...DEFAULT_SETTINGS,
-            ...JSON.parse(saved),
-          });
-        }
-      } catch (err) {
-        console.log("Settings load failed:", err);
-      }
-    };
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
   
-    loadSettings();
+      if (saved) {
+        setSettings({
+          ...DEFAULT_SETTINGS,
+          ...JSON.parse(saved),
+        });
+      }
+    } catch (err) {
+      console.log("Settings load failed:", err);
+    }
   }, []);
 
   // ======================
@@ -573,10 +656,8 @@ export default function App() {
         )
         .filter((item) => item && item.id)
         .filter((item) => item.content || item.extra_data?.raw_content)
-        .filter((item) => 
-            item.app_package !== "org.telegram.messenger" &&
-            item.app_package !== "another.package.to.exclude" // Exclude additional packages here
-        )
+        .filter((item) => item.app_package !== "org.telegram.messenger")
+        
         .map(normalizeBackendNotification);
   
       if (hydratedArray.length > 0) {
@@ -586,7 +667,12 @@ export default function App() {
             
             const threadKey = `${conversation.sourceApp}-${conversation.sender}`;
             const existingThread = acc[threadKey];
-            
+            console.log(
+              "HYDRATE:",
+              conversation.sender,
+              conversation.displayName,
+              conversation.phone
+            );
             const replyMessages = repliesData
               .filter((r) => r.notification_id === conversation.id)
               .map((r) => ({
@@ -661,7 +747,7 @@ export default function App() {
    }
  };
 
-  const updateSetting = async (key, value) => {
+  const updateSetting = (key, value) => {
     const updated = {
       ...settings,
       [key]: value,
@@ -670,7 +756,7 @@ export default function App() {
     setSettings(updated);
   
     try {
-      await AsyncStorage.setItem(
+      localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify(updated)
       );
