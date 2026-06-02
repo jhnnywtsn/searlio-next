@@ -171,12 +171,18 @@ const getAppLabel = (sourceApp = "") => {
   )
     return "TextNow";
   
-  if (app.includes("signal")) return "Signal";
+  if (app.includes("org.thoughtcrime.securesms")) return "Signal";
   if (app.includes("telegram")) return "Telegram";
   if (app.includes("whatsapp")) return "WhatsApp";
   if (app.includes("facebook.orca")) return "Messenger";
   if (app.includes("android.apps.messaging")) return "Messages";
-  if (app.includes("google.android.gm")) return "Gmail";
+  if (app.includes("gm")) return "Gmail";
+  if (app.includes("com.snapchat.android")) return "SnapChat";
+  if (app.includes("com.zangi.messenger")) return "Zangi";
+  if (app.includes("com.instagram.android")) return "Instagram";
+  if (app.includes("com.Slack")) return "Slack";
+  if (app.includes("com.discord")) return "Discord";
+  if (app.includes("com.microsoft.office.outlook")) return "Outlook";
 };
 
 
@@ -184,7 +190,7 @@ const getAppLabel = (sourceApp = "") => {
 const getChannelIcon = (app: string = "") => {
   const value = app.toLowerCase();
 
-  if (value.includes("signal")) return "🟦";
+  if (value.includes("org.thoughtcrime.securesms")) return "🟦";
   if (value.includes("telegram")) return "✈️";
   if (value.includes("whatsapp")) return "🟢";
   if (value.includes("googlevoice")) return "📞";
@@ -827,6 +833,110 @@ export default function App() {
                 </Text>
               </TouchableOpacity>
             ))}
+          </View>
+          {/* New Reply Length Section */}
+          <Text style={styles.settingsSection}>
+            Reply Length
+          </Text>
+          
+          <View style={styles.settingsRow}>
+            {["short", "medium", "long"].map((length) => (
+              <TouchableOpacity
+                key={length}
+                style={[
+                  styles.settingsChip,
+                  settings.replyLength === length &&
+                    styles.settingsChipActive,
+                ]}
+                onPress={() =>
+                  updateSetting("replyLength", length)
+                }
+              >
+                <Text style={styles.settingsChipText}>
+                  {length}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.settingsSection}>
+            Auto Send
+          </Text>
+          
+          <View style={styles.settingsRow}>
+            <TouchableOpacity
+              style={[
+                styles.settingsChip,
+                settings.autoSend &&
+                  styles.settingsChipActive,
+              ]}
+              onPress={() =>
+                updateSetting("autoSend", !settings.autoSend)
+              }
+            >
+              <Text style={styles.settingsChipText}>
+                {settings.autoSend ? "enabled" : "disabled"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.settingsSection}>
+            Skip Signal
+          </Text>
+          
+          <View style={styles.settingsRow}>
+            <TouchableOpacity
+              style={[
+                styles.settingsChip,
+                settings.skipSignal &&
+                  styles.settingsChipActive,
+              ]}
+              onPress={() =>
+                updateSetting("skipSignal", !settings.skipSignal)
+              }
+            >
+              <Text style={styles.settingsChipText}>
+                {settings.skipSignal ? "enabled" : "disabled"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.settingsSection}>
+            Skip Telegram
+          </Text>
+          
+          <View style={styles.settingsRow}>
+            <TouchableOpacity
+              style={[
+                styles.settingsChip,
+                settings.skipTelegram &&
+                  styles.settingsChipActive,
+              ]}
+              onPress={() =>
+                updateSetting("skipTelegram", !settings.skipTelegram)
+              }
+            >
+              <Text style={styles.settingsChipText}>
+                {settings.skipTelegram ? "enabled" : "disabled"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.settingsSection}>
+            High Priority Only
+          </Text>
+          
+          <View style={styles.settingsRow}>
+            <TouchableOpacity
+              style={[
+                styles.settingsChip,
+                settings.highPriorityOnly &&
+                  styles.settingsChipActive,
+              ]}
+              onPress={() =>
+                updateSetting("highPriorityOnly", !settings.highPriorityOnly)
+              }
+            >
+              <Text style={styles.settingsChipText}>
+                {settings.highPriorityOnly ? "enabled" : "disabled"}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
         
