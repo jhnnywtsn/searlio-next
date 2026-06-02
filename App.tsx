@@ -310,12 +310,14 @@ export default function App() {
         }
   
         if (settings.highPriorityOnly) {
-          const hasPriority = conversation.messages.some(
-            (m) =>
-              (m.text || "")
-                .toLowerCase()
-                .includes("urgent")
-          );
+          const hasPriority =
+            conversation.priority === "high" ||
+            conversation.messages.some(
+              (m) =>
+                (m.text || "")
+                  .toLowerCase()
+                  .includes("urgent")
+            );
   
           if (!hasPriority) return false;
         }
